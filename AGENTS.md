@@ -66,7 +66,7 @@ When a process should continue despite failures, it must **skip the failed item 
 
 ## Development Commands
 
-### Frontend (ptolemy-ui-main/)
+### Frontend (ui/)
 
 ```bash
 npm run dev              # Start development server on port 3737
@@ -106,7 +106,7 @@ uv run mypy src/         # Type check
 
 # Docker operations
 docker compose up --build -d       # Start all services
-docker compose --profile backend up -d  # Backend only (for hybrid dev)
+docker compose up ptolemy-server ptolemy-mcp -d  # Backend only (for hybrid dev)
 docker compose logs -f ptolemy-server   # View server logs
 docker compose logs -f ptolemy-mcp      # View MCP server logs
 docker compose restart ptolemy-server   # Restart after code changes
@@ -118,7 +118,7 @@ docker compose down -v   # Stop and remove volumes
 
 ```bash
 # Hybrid development (recommended) - backend in Docker, frontend local
-make dev                 # Or manually: docker compose --profile backend up -d && cd ptolemy-ui-main && npm run dev
+make dev                 # Or manually: docker compose up ptolemy-server ptolemy-mcp -d && cd ui && npm run dev
 
 # Full Docker mode
 make dev-docker          # Or: docker compose up --build -d
@@ -207,7 +207,7 @@ See `python/.env.example` for complete list
 1. Create route handler in `python/src/server/api_routes/`
 2. Add service logic in `python/src/server/services/`
 3. Include router in `python/src/server/main.py`
-4. Update frontend service in `ptolemy-ui-main/src/features/[feature]/services/`
+4. Update frontend service in `ui/src/features/[feature]/services/`
 
 ### Add a new UI component in features directory
 

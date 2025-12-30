@@ -21,7 +21,7 @@ def _is_missing_page_id_column_error(error: Exception) -> bool:
         return False
     normalized = message.lower()
     return (
-        "archon_crawled_pages" in normalized
+        "ptolemy_crawled_pages" in normalized
         and "page_id" in normalized
         and "pgrst204" in normalized
     )
@@ -32,7 +32,7 @@ def _raise_missing_page_id_column_error(error: Exception) -> None:
 
     guidance = (
         "Supabase rejected document storage because the required "
-        "archon_crawled_pages.page_id column is missing. Apply the SQL script "
+        "ptolemy_crawled_pages.page_id column is missing. Apply the SQL script "
         "migration/0.1.0/011_add_page_metadata_table.sql to your database and restart the server."
     )
     search_logger.critical(guidance)
@@ -127,7 +127,7 @@ async def add_documents_to_supabase(
                             raise
 
                     batch_urls = unique_urls[i : i + delete_batch_size]
-                    client.table("archon_crawled_pages").delete().in_("url", batch_urls).execute()
+                    client.table("ptolemy_crawled_pages").delete().in_("url", batch_urls).execute()
                     # Yield control to allow other async operations
                     if i + delete_batch_size < len(unique_urls):
                         await asyncio.sleep(0.05)  # Reduced pause between delete batches
@@ -157,7 +157,7 @@ async def add_documents_to_supabase(
 
                 batch_urls = unique_urls[i : i + fallback_batch_size]
                 try:
-                    client.table("archon_crawled_pages").delete().in_("url", batch_urls).execute()
+                    client.table("ptolemy_crawled_pages").delete().in_("url", batch_urls).execute()
                     await asyncio.sleep(0.05)  # Rate limit to prevent overwhelming
                 except Exception as inner_e:
                     search_logger.error(
@@ -465,7 +465,7 @@ async def add_documents_to_supabase(
                         raise
 
                 try:
-                    client.table("archon_crawled_pages").insert(batch_data).execute()
+                    client.table("ptolemy_crawled_pages").insert(batch_data).execute()
                     total_chunks_stored += len(batch_data)
 
                     # Increment completed batches and report simple progress
@@ -525,7 +525,7 @@ async def add_documents_to_supabase(
                                     raise
 
                             try:
-                                client.table("archon_crawled_pages").insert(record).execute()
+                                client.table("ptolemy_crawled_pages").insert(record).execute()
                                 successful_inserts += 1
                                 total_chunks_stored += 1
                             except Exception as individual_error:

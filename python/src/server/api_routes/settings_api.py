@@ -290,19 +290,19 @@ async def database_metrics():
 
         # Get projects count
         projects_response = (
-            supabase_client.table("archon_projects").select("id", count="exact").execute()
+            supabase_client.table("ptolemy_projects").select("id", count="exact").execute()
         )
         tables_info["projects"] = (
             projects_response.count if projects_response.count is not None else 0
         )
 
         # Get tasks count
-        tasks_response = supabase_client.table("archon_tasks").select("id", count="exact").execute()
+        tasks_response = supabase_client.table("ptolemy_tasks").select("id", count="exact").execute()
         tables_info["tasks"] = tasks_response.count if tasks_response.count is not None else 0
 
         # Get crawled pages count
         pages_response = (
-            supabase_client.table("archon_crawled_pages").select("id", count="exact").execute()
+            supabase_client.table("ptolemy_crawled_pages").select("id", count="exact").execute()
         )
         tables_info["crawled_pages"] = (
             pages_response.count if pages_response.count is not None else 0
@@ -310,7 +310,7 @@ async def database_metrics():
 
         # Get settings count
         settings_response = (
-            supabase_client.table("archon_settings").select("id", count="exact").execute()
+            supabase_client.table("ptolemy_settings").select("id", count="exact").execute()
         )
         tables_info["settings"] = (
             settings_response.count if settings_response.count is not None else 0

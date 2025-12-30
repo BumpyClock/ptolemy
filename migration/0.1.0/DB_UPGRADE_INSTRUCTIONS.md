@@ -8,15 +8,20 @@ This folder contains database migration scripts for upgrading existing Ptolemy i
 **Always run this FIRST before any migration!**
 
 Creates timestamped backup tables of all your existing data:
-- ✅ Complete backup of `archon_crawled_pages`
-- ✅ Complete backup of `archon_code_examples` 
-- ✅ Complete backup of `archon_sources`
+- ✅ Complete backup of `ptolemy_crawled_pages`
+- ✅ Complete backup of `ptolemy_code_examples` 
+- ✅ Complete backup of `ptolemy_sources`
 - ✅ Easy restore commands provided
 - ✅ Row count verification
 
 ### 2. Migration Scripts (Run in Order)
 
 You only have to run the ones you haven't already! If you don't remember exactly, it is okay to rerun migration scripts.
+
+**2.0. `012_rename_legacy_schema_to_ptolemy.sql` (legacy installs only)**
+- Renames legacy tables/functions/indexes to the `ptolemy_*` schema
+- Rebuilds search functions to point at the new table names
+- Updates stored model compatibility payloads
 
 **2.1. `001_add_source_url_display_name.sql`**
 - Adds display name field to sources table
@@ -64,21 +69,23 @@ You only have to run the ones you haven't already! If you don't remember exactly
 - Keeps settings UI functional even before provider keys are entered
 
 **2.11. `011_add_page_metadata_table.sql`**
-- Adds the `archon_page_metadata` table for full-page storage
-- Introduces the `archon_crawled_pages.page_id` foreign key required for page-based retrieval
+- Adds the `ptolemy_page_metadata` table for full-page storage
+- Introduces the `ptolemy_crawled_pages.page_id` foreign key required for page-based retrieval
 - Creates supporting indexes and comments
 
 ## Migration Process (Follow This Order!)
 
 ### Step 1: Backup Your Data
 ```sql
--- Run: backup_database.sql
--- This creates timestamped backup tables of all your data
+-- If you are already on the ptolemy_* schema, run: backup_database.sql
+-- If you are on a legacy schema, run: 012_rename_legacy_schema_to_ptolemy.sql first
+-- (it creates backups of the core knowledge tables before renaming)
 ```
 
 ### Step 2: Run All Migration Scripts (In Order!)
 ```sql
 -- Run each script in sequence:
+-- 0. Run: 012_rename_legacy_schema_to_ptolemy.sql (legacy installs only)
 -- 1. Run: 001_add_source_url_display_name.sql
 -- 2. Run: 002_add_hybrid_search_tsvector.sql
 -- 3. Run: 003_ollama_add_columns.sql

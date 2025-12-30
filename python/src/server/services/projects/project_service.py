@@ -50,7 +50,7 @@ class ProjectService:
                 project_data["github_repo"] = github_repo.strip()
 
             # Insert project
-            response = self.supabase_client.table("archon_projects").insert(project_data).execute()
+            response = self.supabase_client.table("ptolemy_projects").insert(project_data).execute()
 
             if not response.data:
                 logger.error("Supabase returned empty data for project creation")
@@ -88,7 +88,7 @@ class ProjectService:
             if include_content:
                 # Current behavior - maintain backward compatibility
                 response = (
-                    self.supabase_client.table("archon_projects")
+                    self.supabase_client.table("ptolemy_projects")
                     .select("*")
                     .order("created_at", desc=True)
                     .execute()
@@ -112,7 +112,7 @@ class ProjectService:
                 # Lightweight response for MCP - fetch all data but only return metadata + stats
                 # FIXED: N+1 query problem - now using single query
                 response = (
-                    self.supabase_client.table("archon_projects")
+                    self.supabase_client.table("ptolemy_projects")
                     .select("*")  # Fetch all fields in single query
                     .order("created_at", desc=True)
                     .execute()
@@ -156,7 +156,7 @@ class ProjectService:
         """
         try:
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("*")
                 .eq("id", project_id)
                 .execute()
@@ -172,7 +172,7 @@ class ProjectService:
                 try:
                     # Get source IDs from project_sources table
                     sources_response = (
-                        self.supabase_client.table("archon_project_sources")
+                        self.supabase_client.table("ptolemy_project_sources")
                         .select("source_id, notes")
                         .eq("project_id", project["id"])
                         .execute()
@@ -191,7 +191,7 @@ class ProjectService:
                     # Fetch full source objects
                     if technical_source_ids:
                         tech_sources_response = (
-                            self.supabase_client.table("archon_sources")
+                            self.supabase_client.table("ptolemy_sources")
                             .select("*")
                             .in_("source_id", technical_source_ids)
                             .execute()
@@ -200,7 +200,7 @@ class ProjectService:
 
                     if business_source_ids:
                         biz_sources_response = (
-                            self.supabase_client.table("archon_sources")
+                            self.supabase_client.table("ptolemy_sources")
                             .select("*")
                             .in_("source_id", business_source_ids)
                             .execute()
@@ -234,7 +234,7 @@ class ProjectService:
         try:
             # First, check if project exists
             check_response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("id")
                 .eq("id", project_id)
                 .execute()
@@ -244,7 +244,7 @@ class ProjectService:
 
             # Get task count for reporting
             tasks_response = (
-                self.supabase_client.table("archon_tasks")
+                self.supabase_client.table("ptolemy_tasks")
                 .select("id")
                 .eq("project_id", project_id)
                 .execute()
@@ -253,7 +253,7 @@ class ProjectService:
 
             # Delete the project (tasks will be deleted by cascade)
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .delete()
                 .eq("id", project_id)
                 .execute()
@@ -280,7 +280,7 @@ class ProjectService:
         """
         try:
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("features")
                 .eq("id", project_id)
                 .single()
@@ -348,7 +348,7 @@ class ProjectService:
             if update_fields.get("pinned") is True:
                 # Unpin any other pinned projects first
                 unpin_response = (
-                    self.supabase_client.table("archon_projects")
+                    self.supabase_client.table("ptolemy_projects")
                     .update({"pinned": False})
                     .neq("id", project_id)
                     .eq("pinned", True)
@@ -358,7 +358,7 @@ class ProjectService:
 
             # Update the target project
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .update(update_data)
                 .eq("id", project_id)
                 .execute()
@@ -370,7 +370,7 @@ class ProjectService:
             else:
                 # If update didn't return data, fetch the project to ensure it exists and get current state
                 get_response = (
-                    self.supabase_client.table("archon_projects")
+                    self.supabase_client.table("ptolemy_projects")
                     .select("*")
                     .eq("id", project_id)
                     .execute()

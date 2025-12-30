@@ -36,7 +36,7 @@ Ptolemy uses true microservices architecture with clear separation of concerns:
 
 | Service        | Location             | Purpose                      | Key Features                                                               |
 | -------------- | -------------------- | ---------------------------- | -------------------------------------------------------------------------- |
-| **Frontend**   | `ptolemy-ui-main/`    | Web interface and dashboard  | React, TypeScript, TailwindCSS, Socket.IO client                           |
+| **Frontend**   | `ui/`    | Web interface and dashboard  | React, TypeScript, TailwindCSS, Socket.IO client                           |
 | **Server**     | `python/src/server/` | Core business logic and APIs | FastAPI, service layer, Socket.IO broadcasts, all LLM/embedding operations |
 | **MCP Server** | `python/src/mcp/`    | MCP protocol interface       | Lightweight HTTP wrapper, 14 MCP tools, session management                 |
 | **Agents**     | `python/src/agents/` | PydanticAI agent hosting     | Document and RAG agents, streaming responses                               |
@@ -77,7 +77,7 @@ After forking the repository, you'll need to:
 
    ```bash
    # Using Docker Compose directly
-   docker compose --profile full up --build -d
+   docker compose up --build -d
    
    # Or using Make (if installed)
    make dev-docker
@@ -227,10 +227,10 @@ Test these things using both the UI and the MCP server. This process will be sim
    
    # Or manually
    cd python && python -m pytest       # Backend tests
-   cd ptolemy-ui-main && npm run test   # Frontend tests
+   cd ui && npm run test   # Frontend tests
 
    # Full integration test
-   docker compose --profile full up --build -d
+   docker compose up --build -d
    # Test via UI at http://localhost:3737
    ```
 
@@ -274,10 +274,10 @@ Test these things using both the UI and the MCP server. This process will be sim
 
 **Key locations:**
 
-- **Components**: `ptolemy-ui-main/src/components/` - Reusable UI components organized by feature
-- **Pages**: `ptolemy-ui-main/src/pages/` - Main application routes
-- **Services**: `ptolemy-ui-main/src/services/` - API communication and business logic
-- **Contexts**: `ptolemy-ui-main/src/contexts/` - React context providers for global state
+- **Components**: `ui/src/components/` - Reusable UI components organized by feature
+- **Pages**: `ui/src/pages/` - Main application routes
+- **Services**: `ui/src/services/` - API communication and business logic
+- **Contexts**: `ui/src/contexts/` - React context providers for global state
 
 **Development patterns:**
 
@@ -359,10 +359,10 @@ Test these things using both the UI and the MCP server. This process will be sim
 
    ```bash
    # Create in appropriate category
-   ptolemy-ui-main/src/components/your-category/YourComponent.tsx
+   ui/src/components/your-category/YourComponent.tsx
 
    # Add to appropriate page or parent component
-   ptolemy-ui-main/src/pages/YourPage.tsx
+   ui/src/pages/YourPage.tsx
    ```
 
 2. **UI Design Standards**
@@ -381,7 +381,7 @@ Test these things using both the UI and the MCP server. This process will be sim
    make test-fe
 
    # Or manually
-   cd ptolemy-ui-main && npm run test
+   cd ui && npm run test
 
    # Run with coverage
    npm run test:coverage
@@ -396,7 +396,7 @@ Test these things using both the UI and the MCP server. This process will be sim
    make dev  # Backend in Docker, frontend local
 
    # Or manually for faster iteration
-   cd ptolemy-ui-main && npm run dev
+   cd ui && npm run dev
    # Still connects to Docker backend services
    ```
 

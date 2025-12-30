@@ -32,7 +32,7 @@ Ptolemy UI provides a comprehensive dashboard for managing your AI's knowledge b
 ### Project Structure
 
 ```
-ptolemy-ui-main/
+ui/
 ├── src/
 │   ├── components/          # Reusable UI components
 │   │   ├── ui/             # Base UI components (Button, Card, etc.)

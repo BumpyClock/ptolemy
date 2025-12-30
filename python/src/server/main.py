@@ -277,7 +277,7 @@ async def _check_database_schema():
         client = get_supabase_client()
 
         # Try to query the new columns directly - if they exist, schema is up to date
-        client.table('archon_sources').select('source_url, source_display_name').limit(1).execute()
+        client.table('ptolemy_sources').select('source_url, source_display_name').limit(1).execute()
 
         # Cache successful result permanently
         _schema_check_cache["valid"] = True
@@ -317,7 +317,7 @@ async def _check_database_schema():
             # Table doesn't exist - this is a critical setup issue
             result = {
                 "valid": False,
-                "message": "Required table missing (archon_sources). Run initial migrations before starting."
+                "message": "Required table missing (ptolemy_sources). Run initial migrations before starting."
             }
             # Cache failed result with timestamp
             _schema_check_cache["valid"] = False

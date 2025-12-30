@@ -21,7 +21,7 @@ API: http://localhost:8181
 MCP: http://localhost:8051/mcp
 
 ## Notes
-- Supabase schema is unchanged (compatible with existing Ptolemy data).
+- If you are upgrading from a legacy schema, run `migration/0.1.0/012_rename_legacy_schema_to_ptolemy.sql` first.
 - MCP tools included: `rag_get_available_sources`, `rag_search_knowledge_base`,
   `rag_search_code_examples`, `rag_list_pages_for_source`, `rag_read_full_page`.
 - Projects/Agent Work Orders UI and API routes are disabled in this port.

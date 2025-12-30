@@ -66,7 +66,7 @@ When a process should continue despite failures, it must **skip the failed item 
 
 ## Development Commands
 
-### Frontend (ptolemy-ui-main/)
+### Frontend (ui/)
 
 ```bash
 npm run dev              # Start development server on port 3737
@@ -104,18 +104,11 @@ uv run ruff check        # Run linter
 uv run ruff check --fix  # Auto-fix linting issues
 uv run mypy src/         # Type check
 
-# Agent Work Orders Service (independent microservice)
-make agent-work-orders  # Run agent work orders service locally on 8053
-# Or manually:
-uv run python -m uvicorn src.agent_work_orders.server:app --port 8053 --reload
-
 # Docker operations
 docker compose up --build -d       # Start all services
-docker compose --profile backend up -d  # Backend only (for hybrid dev)
-docker compose --profile work-orders up -d   # Include agent work orders service
+docker compose up ptolemy-server ptolemy-mcp -d  # Backend only (for hybrid dev)
 docker compose logs -f ptolemy-server    # View server logs
 docker compose logs -f ptolemy-mcp       # View MCP server logs
-docker compose logs -f ptolemy-agent-work-orders  # View agent work orders service logs
 docker compose restart ptolemy-server    # Restart after code changes
 docker compose down      # Stop all services
 docker compose down -v   # Stop and remove volumes
@@ -125,21 +118,10 @@ docker compose down -v   # Stop and remove volumes
 
 ```bash
 # Hybrid development (recommended) - backend in Docker, frontend local
-make dev                 # Or manually: docker compose --profile backend up -d && cd ptolemy-ui-main && npm run dev
-
-# Hybrid with Agent Work Orders Service - backend in Docker, agent work orders local
-make dev-work-orders     # Starts backend in Docker, prompts to run agent service in separate terminal
-# Then in separate terminal:
-make agent-work-orders   # Start agent work orders service locally
+make dev                 # Or manually: docker compose up ptolemy-server ptolemy-mcp -d && cd ui && npm run dev
 
 # Full Docker mode
 make dev-docker          # Or: docker compose up --build -d
-docker compose --profile work-orders up -d  # Include agent work orders service
-
-# All Local (3 terminals) - for agent work orders service development
-# Terminal 1: uv run python -m uvicorn src.server.main:app --port 8181 --reload
-# Terminal 2: make agent-work-orders
-# Terminal 3: cd ptolemy-ui-main && npm run dev
 
 # Run linters before committing
 make lint                # Runs both frontend and backend linters
@@ -233,7 +215,7 @@ Environment variable override: `GITHUB_REPO="owner/repo"` can be set to override
 1. Create route handler in `python/src/server/api_routes/`
 2. Add service logic in `python/src/server/services/`
 3. Include router in `python/src/server/main.py`
-4. Update frontend service in `ptolemy-ui-main/src/features/[feature]/services/`
+4. Update frontend service in `ui/src/features/[feature]/services/`
 
 ### Add a new UI component in features directory
 

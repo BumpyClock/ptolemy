@@ -126,7 +126,7 @@ class TestPortConfiguration:
                     "Please set it in your .env file or environment."
                 )
 
-    def test_config_requires_port_or_archon_mcp_port(self):
+    def test_config_requires_port_or_ptolemy_mcp_port(self):
         """Test that config.py requires PORT or PTOLEMY_MCP_PORT."""
         from src.server.config.config import ConfigurationError
 

@@ -58,7 +58,7 @@ class MigrationService:
 
     async def check_migrations_table_exists(self) -> bool:
         """
-        Check if the archon_migrations table exists in the database.
+        Check if the ptolemy_migrations table exists in the database.
 
         Returns:
             True if table exists, False otherwise
@@ -75,7 +75,7 @@ class MigrationService:
                             SELECT 1
                             FROM information_schema.tables
                             WHERE table_schema = 'public'
-                            AND table_name = 'archon_migrations'
+                            AND table_name = 'ptolemy_migrations'
                         ) as exists
                     """
                 }
@@ -90,7 +90,7 @@ class MigrationService:
             try:
                 supabase = self._get_supabase_client()
                 # Try to select from the table with limit 0
-                supabase.table("archon_migrations").select("id").limit(0).execute()
+                supabase.table("ptolemy_migrations").select("id").limit(0).execute()
                 return True
             except Exception as e:
                 logfire.info(f"Migrations table does not exist: {e}")
@@ -110,7 +110,7 @@ class MigrationService:
                 return []
 
             supabase = self._get_supabase_client()
-            result = supabase.table("archon_migrations").select("*").order("applied_at", desc=True).execute()
+            result = supabase.table("ptolemy_migrations").select("*").order("applied_at", desc=True).execute()
 
             return [MigrationRecord(row) for row in result.data]
         except Exception as e:

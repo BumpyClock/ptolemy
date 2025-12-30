@@ -14,7 +14,7 @@
 --   3. Run migration/complete_setup.sql to recreate the schema
 --
 -- Created: 2024-01-01
--- Updated: 2025-01-07 - Added archon_ prefix to all tables
+-- Updated: 2025-01-07 - Added ptolemy_ prefix to all tables
 -- ======================================================================
 
 BEGIN;
@@ -32,41 +32,41 @@ BEGIN
     RAISE NOTICE 'Dropping Row Level Security policies...';
     
     -- Settings table policies
-    DROP POLICY IF EXISTS "Allow service role full access" ON archon_settings;
-    DROP POLICY IF EXISTS "Allow authenticated users to read and update" ON archon_settings;
+    DROP POLICY IF EXISTS "Allow service role full access" ON ptolemy_settings;
+    DROP POLICY IF EXISTS "Allow authenticated users to read and update" ON ptolemy_settings;
     
     -- Crawled pages policies
-    DROP POLICY IF EXISTS "Allow public read access to archon_crawled_pages" ON archon_crawled_pages;
+    DROP POLICY IF EXISTS "Allow public read access to ptolemy_crawled_pages" ON ptolemy_crawled_pages;
     
     -- Sources policies  
-    DROP POLICY IF EXISTS "Allow public read access to archon_sources" ON archon_sources;
+    DROP POLICY IF EXISTS "Allow public read access to ptolemy_sources" ON ptolemy_sources;
     
     -- Code examples policies
-    DROP POLICY IF EXISTS "Allow public read access to archon_code_examples" ON archon_code_examples;
+    DROP POLICY IF EXISTS "Allow public read access to ptolemy_code_examples" ON ptolemy_code_examples;
     
     -- Projects policies
-    DROP POLICY IF EXISTS "Allow service role full access to archon_projects" ON archon_projects;
-    DROP POLICY IF EXISTS "Allow authenticated users to read and update archon_projects" ON archon_projects;
+    DROP POLICY IF EXISTS "Allow service role full access to ptolemy_projects" ON ptolemy_projects;
+    DROP POLICY IF EXISTS "Allow authenticated users to read and update ptolemy_projects" ON ptolemy_projects;
     
     -- Tasks policies
-    DROP POLICY IF EXISTS "Allow service role full access to archon_tasks" ON archon_tasks;
-    DROP POLICY IF EXISTS "Allow authenticated users to read and update archon_tasks" ON archon_tasks;
+    DROP POLICY IF EXISTS "Allow service role full access to ptolemy_tasks" ON ptolemy_tasks;
+    DROP POLICY IF EXISTS "Allow authenticated users to read and update ptolemy_tasks" ON ptolemy_tasks;
     
     -- Project sources policies
-    DROP POLICY IF EXISTS "Allow service role full access to archon_project_sources" ON archon_project_sources;
-    DROP POLICY IF EXISTS "Allow authenticated users to read and update archon_project_sources" ON archon_project_sources;
+    DROP POLICY IF EXISTS "Allow service role full access to ptolemy_project_sources" ON ptolemy_project_sources;
+    DROP POLICY IF EXISTS "Allow authenticated users to read and update ptolemy_project_sources" ON ptolemy_project_sources;
     
     -- Document versions policies
-    DROP POLICY IF EXISTS "Allow service role full access to archon_document_versions" ON archon_document_versions;
-    DROP POLICY IF EXISTS "Allow authenticated users to read archon_document_versions" ON archon_document_versions;
+    DROP POLICY IF EXISTS "Allow service role full access to ptolemy_document_versions" ON ptolemy_document_versions;
+    DROP POLICY IF EXISTS "Allow authenticated users to read ptolemy_document_versions" ON ptolemy_document_versions;
     
     -- Prompts policies
-    DROP POLICY IF EXISTS "Allow service role full access to archon_prompts" ON archon_prompts;
-    DROP POLICY IF EXISTS "Allow authenticated users to read archon_prompts" ON archon_prompts;
+    DROP POLICY IF EXISTS "Allow service role full access to ptolemy_prompts" ON ptolemy_prompts;
+    DROP POLICY IF EXISTS "Allow authenticated users to read ptolemy_prompts" ON ptolemy_prompts;
 
     -- Migration tracking policies
-    DROP POLICY IF EXISTS "Allow service role full access to archon_migrations" ON archon_migrations;
-    DROP POLICY IF EXISTS "Allow authenticated users to read archon_migrations" ON archon_migrations;
+    DROP POLICY IF EXISTS "Allow service role full access to ptolemy_migrations" ON ptolemy_migrations;
+    DROP POLICY IF EXISTS "Allow authenticated users to read ptolemy_migrations" ON ptolemy_migrations;
 
     -- Legacy table policies (for migration from old schema)
     DROP POLICY IF EXISTS "Allow service role full access" ON settings;
@@ -101,19 +101,19 @@ BEGIN
     RAISE NOTICE 'Dropping triggers...';
     
     -- Settings table triggers
-    DROP TRIGGER IF EXISTS update_archon_settings_updated_at ON archon_settings;
+    DROP TRIGGER IF EXISTS update_ptolemy_settings_updated_at ON ptolemy_settings;
     DROP TRIGGER IF EXISTS update_settings_updated_at ON settings;
     
     -- Projects table triggers
-    DROP TRIGGER IF EXISTS update_archon_projects_updated_at ON archon_projects;
+    DROP TRIGGER IF EXISTS update_ptolemy_projects_updated_at ON ptolemy_projects;
     DROP TRIGGER IF EXISTS update_projects_updated_at ON projects;
     
     -- Tasks table triggers
-    DROP TRIGGER IF EXISTS update_archon_tasks_updated_at ON archon_tasks;
+    DROP TRIGGER IF EXISTS update_ptolemy_tasks_updated_at ON ptolemy_tasks;
     DROP TRIGGER IF EXISTS update_tasks_updated_at ON tasks;
     
     -- Prompts table triggers
-    DROP TRIGGER IF EXISTS update_archon_prompts_updated_at ON archon_prompts;
+    DROP TRIGGER IF EXISTS update_ptolemy_prompts_updated_at ON ptolemy_prompts;
     DROP TRIGGER IF EXISTS update_prompts_updated_at ON prompts;
     
     RAISE NOTICE 'Triggers dropped successfully.';
@@ -133,13 +133,13 @@ BEGIN
     -- Update timestamp function (used by triggers)
     DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
     
-    -- Search functions (new with archon_ prefix)
-    DROP FUNCTION IF EXISTS match_archon_crawled_pages(vector, int, jsonb, text) CASCADE;
-    DROP FUNCTION IF EXISTS match_archon_code_examples(vector, int, jsonb, text) CASCADE;
+    -- Search functions (new with ptolemy_ prefix)
+    DROP FUNCTION IF EXISTS match_ptolemy_crawled_pages(vector, int, jsonb, text) CASCADE;
+    DROP FUNCTION IF EXISTS match_ptolemy_code_examples(vector, int, jsonb, text) CASCADE;
     
     -- Hybrid search functions (with ts_vector support)
-    DROP FUNCTION IF EXISTS hybrid_search_archon_crawled_pages(vector, text, int, jsonb, text) CASCADE;
-    DROP FUNCTION IF EXISTS hybrid_search_archon_code_examples(vector, text, int, jsonb, text) CASCADE;
+    DROP FUNCTION IF EXISTS hybrid_search_ptolemy_crawled_pages(vector, text, int, jsonb, text) CASCADE;
+    DROP FUNCTION IF EXISTS hybrid_search_ptolemy_code_examples(vector, text, int, jsonb, text) CASCADE;
     
     -- Search functions (old without prefix)
     DROP FUNCTION IF EXISTS match_crawled_pages(vector, int, jsonb, text) CASCADE;
@@ -164,25 +164,25 @@ BEGIN
     
     -- Drop in reverse dependency order to minimize cascade issues
     
-    -- Project System (complex dependencies) - new archon_ prefixed tables
-    DROP TABLE IF EXISTS archon_document_versions CASCADE;
-    DROP TABLE IF EXISTS archon_project_sources CASCADE;
-    DROP TABLE IF EXISTS archon_tasks CASCADE;
-    DROP TABLE IF EXISTS archon_projects CASCADE;
-    DROP TABLE IF EXISTS archon_prompts CASCADE;
+    -- Project System (complex dependencies) - new ptolemy_ prefixed tables
+    DROP TABLE IF EXISTS ptolemy_document_versions CASCADE;
+    DROP TABLE IF EXISTS ptolemy_project_sources CASCADE;
+    DROP TABLE IF EXISTS ptolemy_tasks CASCADE;
+    DROP TABLE IF EXISTS ptolemy_projects CASCADE;
+    DROP TABLE IF EXISTS ptolemy_prompts CASCADE;
     
-    -- Knowledge Base System - new archon_ prefixed tables
-    DROP TABLE IF EXISTS archon_code_examples CASCADE;
-    DROP TABLE IF EXISTS archon_crawled_pages CASCADE;
-    DROP TABLE IF EXISTS archon_sources CASCADE;
+    -- Knowledge Base System - new ptolemy_ prefixed tables
+    DROP TABLE IF EXISTS ptolemy_code_examples CASCADE;
+    DROP TABLE IF EXISTS ptolemy_crawled_pages CASCADE;
+    DROP TABLE IF EXISTS ptolemy_sources CASCADE;
     
-    -- Configuration System - new archon_ prefixed table
-    DROP TABLE IF EXISTS archon_settings CASCADE;
+    -- Configuration System - new ptolemy_ prefixed table
+    DROP TABLE IF EXISTS ptolemy_settings CASCADE;
 
     -- Migration tracking table
-    DROP TABLE IF EXISTS archon_migrations CASCADE;
+    DROP TABLE IF EXISTS ptolemy_migrations CASCADE;
 
-    -- Legacy tables (without archon_ prefix) - for migration purposes
+    -- Legacy tables (without ptolemy_ prefix) - for migration purposes
     DROP TABLE IF EXISTS document_versions CASCADE;
     DROP TABLE IF EXISTS project_sources CASCADE;
     DROP TABLE IF EXISTS tasks CASCADE;
@@ -232,7 +232,7 @@ BEGIN
         SELECT indexname 
         FROM pg_indexes 
         WHERE schemaname = 'public' 
-        AND (indexname LIKE 'idx_%' OR indexname LIKE 'idx_archon_%')
+        AND (indexname LIKE 'idx_%' OR indexname LIKE 'idx_ptolemy_%')
     LOOP
         BEGIN
             EXECUTE 'DROP INDEX IF EXISTS ' || index_name || ' CASCADE';

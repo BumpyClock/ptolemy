@@ -149,7 +149,7 @@ class DocumentAgent(BaseAgent[DocumentDependencies, DocumentOperation]):
 
                 supabase = get_supabase_client()
                 response = (
-                    supabase.table("archon_projects")
+                    supabase.table("ptolemy_projects")
                     .select("docs")
                     .eq("id", ctx.deps.project_id)
                     .execute()
@@ -180,7 +180,7 @@ class DocumentAgent(BaseAgent[DocumentDependencies, DocumentOperation]):
             try:
                 supabase = get_supabase_client()
                 response = (
-                    supabase.table("archon_projects")
+                    supabase.table("ptolemy_projects")
                     .select("docs")
                     .eq("id", ctx.deps.project_id)
                     .execute()

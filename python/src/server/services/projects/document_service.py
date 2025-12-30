@@ -43,7 +43,7 @@ class DocumentService:
         try:
             # Get current project
             project_response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("docs")
                 .eq("id", project_id)
                 .execute()
@@ -72,7 +72,7 @@ class DocumentService:
 
             # Update project
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .update({"docs": updated_docs})
                 .eq("id", project_id)
                 .execute()
@@ -110,7 +110,7 @@ class DocumentService:
         """
         try:
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("docs")
                 .eq("id", project_id)
                 .execute()
@@ -163,7 +163,7 @@ class DocumentService:
         """
         try:
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("docs")
                 .eq("id", project_id)
                 .execute()
@@ -208,7 +208,7 @@ class DocumentService:
         try:
             # Get current project docs
             project_response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("docs")
                 .eq("id", project_id)
                 .execute()
@@ -272,7 +272,7 @@ class DocumentService:
 
             # Update the project
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .update({"docs": docs, "updated_at": datetime.now().isoformat()})
                 .eq("id", project_id)
                 .execute()
@@ -304,7 +304,7 @@ class DocumentService:
         try:
             # Get current project docs
             project_response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .select("docs")
                 .eq("id", project_id)
                 .execute()
@@ -325,7 +325,7 @@ class DocumentService:
 
             # Update the project
             response = (
-                self.supabase_client.table("archon_projects")
+                self.supabase_client.table("ptolemy_projects")
                 .update({"docs": docs, "updated_at": datetime.now().isoformat()})
                 .eq("id", project_id)
                 .execute()

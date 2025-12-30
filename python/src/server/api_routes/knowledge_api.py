@@ -393,7 +393,7 @@ async def get_knowledge_item_chunks(
         supabase = get_supabase_client()
 
         # First get total count
-        count_query = supabase.from_("archon_crawled_pages").select(
+        count_query = supabase.from_("ptolemy_crawled_pages").select(
             "id", count="exact", head=True
         )
         count_query = count_query.eq("source_id", source_id)
@@ -405,7 +405,7 @@ async def get_knowledge_item_chunks(
         total = count_result.count if hasattr(count_result, "count") else 0
 
         # Build the main query with pagination
-        query = supabase.from_("archon_crawled_pages").select(
+        query = supabase.from_("ptolemy_crawled_pages").select(
             "id, source_id, content, metadata, url"
         )
         query = query.eq("source_id", source_id)
@@ -550,7 +550,7 @@ async def get_knowledge_item_code_examples(
 
         # First get total count
         count_result = (
-            supabase.from_("archon_code_examples")
+            supabase.from_("ptolemy_code_examples")
             .select("id", count="exact", head=True)
             .eq("source_id", source_id)
             .execute()
@@ -559,7 +559,7 @@ async def get_knowledge_item_code_examples(
 
         # Get paginated code examples
         result = (
-            supabase.from_("archon_code_examples")
+            supabase.from_("ptolemy_code_examples")
             .select("id, source_id, content, summary, metadata")
             .eq("source_id", source_id)
             .order("id", desc=False)  # Deterministic ordering
