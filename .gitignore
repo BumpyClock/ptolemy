@@ -1,0 +1,31 @@
+__pycache__
+.env
+.serena
+.claude/settings.local.json
+PRPs/local
+PRPs/completed/
+PRPs/stories/
+PRPs/examples
+PRPs/features
+PRPs/specs
+PRPs/reviews/
+/logs/
+.zed
+tmp/
+temp/
+UAT/
+.ai_agents/session_context/
+
+# Temporary validation/report markdown files
+/*_RESULTS.md
+/*_SUMMARY.md
+/*_REPORT.md
+/*_SUCCESS.md
+/*_COMPLETION*.md
+/ACTUAL_*.md
+/VALIDATION_*.md
+
+.DS_Store
+
+# Local release notes testing
+release-notes-*.md

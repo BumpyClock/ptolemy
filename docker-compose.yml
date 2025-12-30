@@ -1,0 +1,140 @@
+# Docker Compose (Ptolemy):
+# - Starts server, mcp, and frontend
+
+services:
+  # Server Service (FastAPI + Socket.IO + Crawling)
+  ptolemy-server:
+    build:
+      context: ./python
+      dockerfile: Dockerfile.server
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+        PTOLEMY_SERVER_PORT: ${PTOLEMY_SERVER_PORT:-8181}
+    container_name: ptolemy-server
+    ports:
+      - "${PTOLEMY_SERVER_PORT:-8181}:${PTOLEMY_SERVER_PORT:-8181}"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-}
+      - SERVICE_DISCOVERY_MODE=docker_compose
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PTOLEMY_SERVER_PORT=${PTOLEMY_SERVER_PORT:-8181}
+      - PTOLEMY_MCP_PORT=${PTOLEMY_MCP_PORT:-8051}
+      - PTOLEMY_HOST=${HOST:-localhost}
+    networks:
+      - app-network
+    volumes:
+      # SECURITY: Docker socket mounting removed (CVE-2025-9074 - CVSS 9.3)
+      # MCP status now monitored via HTTP health checks (secure, portable)
+      # To re-enable Docker socket mode (not recommended):
+      #   1. Set ENABLE_DOCKER_SOCKET_MONITORING=true in .env
+      #   2. Uncomment the line below
+      # - /var/run/docker.sock:/var/run/docker.sock # SECURITY RISK: root-equivalent host access
+      - ./python/src:/app/src # Mount source code for hot reload
+      - ./python/tests:/app/tests # Mount tests for UI test execution
+      - ./migration:/app/migration # Mount migration files for version tracking
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "src.server.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "${PTOLEMY_SERVER_PORT:-8181}",
+        "--reload",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "sh",
+          "-c",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:${PTOLEMY_SERVER_PORT:-8181}/health'')"',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Lightweight MCP Server Service (HTTP-based)
+  ptolemy-mcp:
+    build:
+      context: ./python
+      dockerfile: Dockerfile.mcp
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+        PTOLEMY_MCP_PORT: ${PTOLEMY_MCP_PORT:-8051}
+    container_name: ptolemy-mcp
+    ports:
+      - "${PTOLEMY_MCP_PORT:-8051}:${PTOLEMY_MCP_PORT:-8051}"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-}
+      - SERVICE_DISCOVERY_MODE=docker_compose
+      - TRANSPORT=sse
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # MCP needs to know where to find other services
+      - API_SERVICE_URL=http://ptolemy-server:${PTOLEMY_SERVER_PORT:-8181}
+      - PTOLEMY_MCP_PORT=${PTOLEMY_MCP_PORT:-8051}
+      - PTOLEMY_SERVER_PORT=${PTOLEMY_SERVER_PORT:-8181}
+    networks:
+      - app-network
+    depends_on:
+      ptolemy-server:
+        condition: service_healthy
+      
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "sh",
+          "-c",
+          'python -c "import socket; s=socket.socket(); s.connect((''localhost'', ${PTOLEMY_MCP_PORT:-8051})); s.close()"',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s # Give dependencies time to start
+
+  # Frontend
+  ptolemy-frontend:
+    build: ./ui
+    container_name: ptolemy-ui
+    ports:
+      - "${PTOLEMY_UI_PORT:-3737}:3737"
+    environment:
+      # Don't set VITE_API_URL so frontend uses relative URLs through proxy
+      # - VITE_API_URL=http://${HOST:-localhost}:${PTOLEMY_SERVER_PORT:-8181}
+      - VITE_PTOLEMY_SERVER_PORT=${PTOLEMY_SERVER_PORT:-8181}
+      - PTOLEMY_SERVER_PORT=${PTOLEMY_SERVER_PORT:-8181}
+      - HOST=${HOST:-localhost}
+      - PROD=${PROD:-false}
+      - VITE_ALLOWED_HOSTS=${VITE_ALLOWED_HOSTS:-}
+      - VITE_SHOW_DEVTOOLS=${VITE_SHOW_DEVTOOLS:-false}
+      - DOCKER_ENV=true
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3737"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./ui/src:/app/src
+      - ./ui/public:/app/public
+    depends_on:
+      ptolemy-server:
+        condition: service_healthy
+
+networks:
+  app-network:
+    driver: bridge
