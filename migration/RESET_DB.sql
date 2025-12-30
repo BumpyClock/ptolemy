@@ -1,5 +1,5 @@
 -- ======================================================================
--- ARCHON DATABASE RESET SCRIPT
+-- PTOLEMY DATABASE RESET SCRIPT
 -- ======================================================================
 -- 
 -- This script safely resets the entire Ptolemy database by dropping all

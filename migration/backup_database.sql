@@ -1,5 +1,5 @@
 -- ======================================================================
--- ARCHON PRE-MIGRATION BACKUP SCRIPT
+-- PTOLEMY PRE-MIGRATION BACKUP SCRIPT
 -- ======================================================================
 -- This script creates backup tables of your existing data before running
 -- the upgrade_to_model_tracking.sql migration.
@@ -86,7 +86,7 @@ WITH backup_info AS (
         (SELECT COUNT(*) FROM archon_sources) as sources_count
 )
 SELECT 
-    '🎉 ARCHON DATABASE BACKUP COMPLETED! 🎉' AS status,
+    '🎉 PTOLEMY DATABASE BACKUP COMPLETED! 🎉' AS status,
     'Your data is now safely backed up' AS message,
     ARRAY[
         'archon_crawled_pages_backup_' || backup_suffix,

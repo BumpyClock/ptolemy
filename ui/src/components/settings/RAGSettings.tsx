@@ -25,7 +25,7 @@ interface ProviderModels {
 type ProviderModelMap = Record<ProviderKey, ProviderModels>;
 
 // Provider model persistence helpers
-const PROVIDER_MODELS_KEY = 'archon_provider_models';
+const PROVIDER_MODELS_KEY = 'ptolemy_provider_models';
 
 const getDefaultModels = (provider: ProviderKey): ProviderModels => {
   const chatDefaults: Record<ProviderKey, string> = {

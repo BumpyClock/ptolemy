@@ -12,7 +12,7 @@ export const IDEGlobalRules = () => {
   const [selectedRuleType, setSelectedRuleType] = useState<RuleType>('claude');
   const { showToast } = useToast();
   
-  const claudeRules = `# CRITICAL: ARCHON-FIRST RULE - READ THIS FIRST
+  const claudeRules = `# CRITICAL: PTOLEMY-FIRST RULE - READ THIS FIRST
   BEFORE doing ANYTHING else, when you see ANY task management scenario:
   1. STOP and check if Ptolemy MCP server is available
   2. Use Ptolemy task management as PRIMARY system
@@ -102,7 +102,7 @@ find_tasks(filter_by="project", filter_value="proj-123")
 - Higher \`task_order\` = higher priority (0-100)
 - Tasks should be 30 min - 4 hours of work`;
 
-  const universalRules = `# CRITICAL: ARCHON-FIRST RULE - READ THIS FIRST
+  const universalRules = `# CRITICAL: PTOLEMY-FIRST RULE - READ THIS FIRST
   BEFORE doing ANYTHING else, when you see ANY task management scenario:
   1. STOP and check if Ptolemy MCP server is available
   2. Use Ptolemy task management as PRIMARY system

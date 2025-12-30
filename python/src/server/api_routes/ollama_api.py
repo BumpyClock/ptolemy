@@ -390,7 +390,7 @@ class StoredModelInfo(BaseModel):
     context_length: int | None
     parameters: str | None
     capabilities: list[str]
-    archon_compatibility: str  # 'full', 'partial', 'limited'
+    ptolemy_compatibility: str  # 'full', 'partial', 'limited'
     compatibility_features: list[str]
     limitations: list[str]
     performance_rating: str | None  # 'high', 'medium', 'low'
@@ -439,7 +439,7 @@ async def discover_and_store_models_endpoint(request: ModelDiscoveryAndStoreRequ
 
                 for model in models:
                     # Assess Ptolemy compatibility
-                    compatibility_info = _assess_archon_compatibility(model)
+                    compatibility_info = _assess_ptolemy_compatibility(model)
 
                     stored_model = StoredModelInfo(
                         name=model.name,
@@ -449,7 +449,7 @@ async def discover_and_store_models_endpoint(request: ModelDiscoveryAndStoreRequ
                         context_length=_extract_context_length(model),
                         parameters=_extract_parameters(model),
                         capabilities=model.capabilities if hasattr(model, 'capabilities') else [],
-                        archon_compatibility=compatibility_info['level'],
+                        ptolemy_compatibility=compatibility_info['level'],
                         compatibility_features=compatibility_info['features'],
                         limitations=compatibility_info['limitations'],
                         performance_rating=_assess_performance_rating(model),
@@ -554,7 +554,7 @@ async def get_stored_models_endpoint() -> ModelListResponse:
                         context_length=model.get('context_length'),
                         parameters=model.get('parameters'),
                         capabilities=model.get('capabilities', []),
-                        archon_compatibility=model.get('archon_compatibility', 'unknown'),
+                        ptolemy_compatibility=model.get('ptolemy_compatibility', 'unknown'),
                         compatibility_features=model.get('compatibility_features', []),
                         limitations=model.get('limitations', []),
                         performance_rating=model.get('performance_rating'),
@@ -599,7 +599,7 @@ async def _warm_model_cache(instance_urls: list[str]) -> None:
 
 
 # Helper functions for model assessment and analysis
-async def _assess_archon_compatibility_with_testing(model, instance_url: str) -> dict[str, Any]:
+async def _assess_ptolemy_compatibility_with_testing(model, instance_url: str) -> dict[str, Any]:
     """Assess Ptolemy compatibility for a given model using actual capability testing."""
     model_name = model.name.lower()
     capabilities = getattr(model, 'capabilities', [])
@@ -650,8 +650,8 @@ async def _assess_archon_compatibility_with_testing(model, instance_url: str) ->
     }
 
 
-def _assess_archon_compatibility(model) -> dict[str, Any]:
-    """Legacy compatibility assessment for backward compatibility. Consider using _assess_archon_compatibility_with_testing for new code."""
+def _assess_ptolemy_compatibility(model) -> dict[str, Any]:
+    """Legacy compatibility assessment for backward compatibility. Consider using _assess_ptolemy_compatibility_with_testing for new code."""
     model_name = model.name.lower()
     capabilities = getattr(model, 'capabilities', [])
 
@@ -1076,7 +1076,7 @@ async def discover_models_with_real_details(request: ModelDiscoveryAndStoreReque
                                 context_length=current_context or max_context,
                                 parameters=param_string,
                                 capabilities=capabilities if capabilities else [],
-                                archon_compatibility=compatibility['level'],
+                                ptolemy_compatibility=compatibility['level'],
                                 compatibility_features=compatibility['features'],
                                 limitations=compatibility['limitations'],
                                 performance_rating=None,

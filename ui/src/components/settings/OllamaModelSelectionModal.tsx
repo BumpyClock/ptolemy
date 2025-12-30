@@ -26,7 +26,7 @@ interface ModelInfo {
     format?: string;
   };
   capabilities: string[];
-  archon_compatibility: 'full' | 'partial' | 'limited';
+  ptolemy_compatibility: 'full' | 'partial' | 'limited';
   compatibility_features: string[];
   limitations: string[];
   performance_rating?: 'high' | 'medium' | 'low';
@@ -118,7 +118,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
   });
 
   const getCardBorderColor = () => {
-    switch (model.archon_compatibility) {
+    switch (model.ptolemy_compatibility) {
       case 'full': return 'border-green-500/50';
       case 'partial': return 'border-orange-500/50';
       case 'limited': return 'border-red-500/50';
@@ -197,7 +197,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
         )}
         {/* Compatibility Badge - only for chat models */}
         {model.model_type === 'chat' && (
-          <CompatibilityBadge level={model.archon_compatibility} />
+          <CompatibilityBadge level={model.ptolemy_compatibility} />
         )}
       </div>
 
@@ -375,7 +375,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
         name: m.name, 
         host: m.host, 
         model_type: m.model_type, 
-        archon_compatibility: m.archon_compatibility,
+        ptolemy_compatibility: m.ptolemy_compatibility,
         instance_url: m.instance_url
       })),
       selectedInstanceUrl,
@@ -407,7 +407,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
       }
 
       // Filter by compatibility
-      if (compatibilityFilter !== 'all' && model.archon_compatibility !== compatibilityFilter) {
+      if (compatibilityFilter !== 'all' && model.ptolemy_compatibility !== compatibilityFilter) {
         return false;
       }
 
@@ -418,8 +418,8 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
     filtered.sort((a, b) => {
       // Primary sort: Support level (full → partial → limited)
       const supportOrder = { 'full': 3, 'partial': 2, 'limited': 1 };
-      const aSupportLevel = supportOrder[a.archon_compatibility] || 1;
-      const bSupportLevel = supportOrder[b.archon_compatibility] || 1;
+      const aSupportLevel = supportOrder[a.ptolemy_compatibility] || 1;
+      const bSupportLevel = supportOrder[b.ptolemy_compatibility] || 1;
       
       if (aSupportLevel !== bSupportLevel) {
         return bSupportLevel - aSupportLevel; // Higher support levels first
@@ -609,7 +609,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
               size_mb: model.size ? Math.round(model.size / 1048576) : undefined,
               parameters: model.parameters,
               capabilities: model.capabilities || ['chat'],
-              archon_compatibility: compatibility,
+              ptolemy_compatibility: compatibility,
               compatibility_features: getCompatibilityFeatures(compatibility),
               limitations: getCompatibilityLimitations(compatibility),
               last_updated: new Date().toISOString(),
@@ -660,7 +660,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
               embedding_dimensions: model.dimensions,
               dimensions: model.dimensions, // Some UI might expect this field name
               capabilities: model.capabilities || ['embedding'],
-              archon_compatibility: compatibility,
+              ptolemy_compatibility: compatibility,
               compatibility_features: getCompatibilityFeatures(compatibility),
               limitations: getCompatibilityLimitations(compatibility),
               last_updated: new Date().toISOString(),
@@ -833,7 +833,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
               ...model, 
               host: model.instance_url.replace('/v1', ''), // Remove /v1 suffix to match selectedInstanceUrl
               model_type: 'chat',
-              archon_compatibility: compatibility,
+              ptolemy_compatibility: compatibility,
               size_mb: model.size ? Math.round(model.size / 1048576) : undefined, // Convert bytes to MB
               context_length: model.context_window || model.custom_context_length || model.base_context_length,
               context_info: context_info, // Add the comprehensive context info
@@ -879,7 +879,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
               ...model, 
               host: model.instance_url.replace('/v1', ''), // Remove /v1 suffix to match selectedInstanceUrl
               model_type: 'embedding',
-              archon_compatibility: compatibility,
+              ptolemy_compatibility: compatibility,
               size_mb: model.size ? Math.round(model.size / 1048576) : undefined, // Convert bytes to MB
               context_length: model.context_window || model.custom_context_length || model.base_context_length,
               context_info: context_info, // Add the comprehensive context info

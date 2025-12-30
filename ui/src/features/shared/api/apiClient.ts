@@ -77,7 +77,7 @@ export async function callAPIWithETag<T = unknown>(endpoint: string, options: Re
     // NOTE: Increased to 20s due to database performance issues with large DELETE operations
     // Root cause: Sequential scan on crawled_pages table when deleting sources with 7K+ rows
     // takes 13+ seconds. This is a temporary fix until we implement batch deletion.
-    // See: DELETE FROM archon_crawled_pages WHERE source_id = '9529d5dabe8a726a' (7,073 rows)
+    // See: deletion on crawled pages table for source_id = '9529d5dabe8a726a' (7,073 rows)
     const response = await fetch(fullUrl, {
       ...options,
       headers,
