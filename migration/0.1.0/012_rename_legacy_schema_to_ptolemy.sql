@@ -131,9 +131,9 @@ BEGIN
     LOOP
         BEGIN
             EXECUTE format(
-                'ALTER TABLE public.%I RENAME TRIGGER %I TO %I',
-                record_row.table_name,
+                'ALTER TRIGGER %I ON public.%I RENAME TO %I',
                 record_row.tgname,
+                record_row.table_name,
                 replace(record_row.tgname, 'archon_', 'ptolemy_')
             );
         EXCEPTION
