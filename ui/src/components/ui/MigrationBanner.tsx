@@ -29,7 +29,7 @@ export const MigrationBanner: React.FC<MigrationBannerProps> = ({
             <ol className="text-sm text-red-700 dark:text-red-400 space-y-1 list-decimal list-inside">
               <li>Open your Supabase project dashboard</li>
               <li>Navigate to the SQL Editor</li>
-              <li>Copy and run the migration script from: <code className="bg-red-200 dark:bg-red-800 px-1 rounded">migration/add_source_url_display_name.sql</code></li>
+              <li>Copy and run the migration script from: <code className="bg-red-200 dark:bg-red-800 px-1 rounded">migration/complete_setup.sql</code></li>
               <li>Restart Docker containers: <code className="bg-red-200 dark:bg-red-800 px-1 rounded">docker compose down && docker compose up --build -d</code></li>
               <li>If you used a profile, add it: <code className="bg-red-200 dark:bg-red-800 px-1 rounded">--profile full</code></li>
             </ol>

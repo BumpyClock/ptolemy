@@ -40,13 +40,13 @@ def test_pending_migration_init():
         version="0.1.0",
         name="001_initial",
         sql_content="CREATE TABLE test (id INT);",
-        file_path="migration/0.1.0/001_initial.sql"
+        file_path="migration/001_initial.sql"
     )
 
     assert migration.version == "0.1.0"
     assert migration.name == "001_initial"
     assert migration.sql_content == "CREATE TABLE test (id INT);"
-    assert migration.file_path == "migration/0.1.0/001_initial.sql"
+    assert migration.file_path == "migration/001_initial.sql"
     assert migration.checksum == hashlib.md5("CREATE TABLE test (id INT);".encode()).hexdigest()
 
 
@@ -133,13 +133,13 @@ async def test_get_pending_migrations_with_files(migration_service, mock_supabas
             version="0.1.0",
             name="001_initial",
             sql_content="CREATE TABLE test;",
-            file_path="migration/0.1.0/001_initial.sql"
+            file_path="migration/001_initial.sql"
         ),
         PendingMigration(
             version="0.1.0",
             name="002_update",
             sql_content="ALTER TABLE test ADD col TEXT;",
-            file_path="migration/0.1.0/002_update.sql"
+            file_path="migration/002_update.sql"
         )
     ]
 
@@ -163,13 +163,13 @@ async def test_get_pending_migrations_some_applied(migration_service, mock_supab
             version="0.1.0",
             name="001_initial",
             sql_content="CREATE TABLE test;",
-            file_path="migration/0.1.0/001_initial.sql"
+            file_path="migration/001_initial.sql"
         ),
         PendingMigration(
             version="0.1.0",
             name="002_update",
             sql_content="ALTER TABLE test ADD col TEXT;",
-            file_path="migration/0.1.0/002_update.sql"
+            file_path="migration/002_update.sql"
         )
     ]
 
@@ -201,7 +201,7 @@ async def test_get_migration_status_all_applied(migration_service, mock_supabase
             version="0.1.0",
             name="001_initial",
             sql_content="CREATE TABLE test;",
-            file_path="migration/0.1.0/001_initial.sql"
+            file_path="migration/001_initial.sql"
         )
     ]
 
@@ -236,13 +236,13 @@ async def test_get_migration_status_bootstrap_required(migration_service, mock_s
             version="0.1.0",
             name="001_initial",
             sql_content="CREATE TABLE test;",
-            file_path="migration/0.1.0/001_initial.sql"
+            file_path="migration/001_initial.sql"
         ),
         PendingMigration(
             version="0.1.0",
             name="002_update",
             sql_content="ALTER TABLE test ADD col TEXT;",
-            file_path="migration/0.1.0/002_update.sql"
+            file_path="migration/002_update.sql"
         )
     ]
 

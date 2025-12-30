@@ -1051,19 +1051,7 @@ COMMENT ON COLUMN ptolemy_migrations.checksum IS 'Optional MD5 checksum of migra
 -- Record all migrations as applied since this is a complete setup
 -- This ensures the migration system knows the database is fully up-to-date
 INSERT INTO ptolemy_migrations (version, migration_name)
-VALUES
-  ('0.1.0', '001_add_source_url_display_name'),
-  ('0.1.0', '002_add_hybrid_search_tsvector'),
-  ('0.1.0', '003_ollama_add_columns'),
-  ('0.1.0', '004_ollama_migrate_data'),
-  ('0.1.0', '005_ollama_create_functions'),
-  ('0.1.0', '006_ollama_create_indexes_optional'),
-  ('0.1.0', '007_add_priority_column_to_tasks'),
-  ('0.1.0', '008_add_migration_tracking'),
-  ('0.1.0', '009_add_cascade_delete_constraints'),
-  ('0.1.0', '010_add_provider_placeholders'),
-  ('0.1.0', '011_add_page_metadata_table'),
-  ('0.1.0', '012_rename_legacy_schema_to_ptolemy')
+VALUES ('0.1.0', 'complete_setup')
 ON CONFLICT (version, migration_name) DO NOTHING;
 
 -- Enable Row Level Security on migrations table

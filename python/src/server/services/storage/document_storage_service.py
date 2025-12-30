@@ -33,7 +33,7 @@ def _raise_missing_page_id_column_error(error: Exception) -> None:
     guidance = (
         "Supabase rejected document storage because the required "
         "ptolemy_crawled_pages.page_id column is missing. Apply the SQL script "
-        "migration/0.1.0/011_add_page_metadata_table.sql to your database and restart the server."
+        "migration/complete_setup.sql to your database and restart the server."
     )
     search_logger.critical(guidance)
     raise RuntimeError(guidance) from error

@@ -1267,7 +1267,7 @@ async def knowledge_health():
             "ready": False,
             "migration_required": True,
             "message": schema_status["message"],
-            "migration_instructions": "Open Supabase Dashboard → SQL Editor → Run: migration/add_source_url_display_name.sql"
+            "migration_instructions": "Open Supabase Dashboard → SQL Editor → Run: migration/complete_setup.sql"
         }
 
     # Removed health check logging to reduce console noise

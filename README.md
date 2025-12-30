@@ -1,6 +1,6 @@
 # Ptolemy
 
-A trimmed-down Ptolemy port focused on knowledge base RAG + MCP tools.
+Ptolemy is a trimmed-down knowledge MCP focused on RAG search and knowledge base management.
 
 ## Services
 - **API server**: FastAPI backend for knowledge base, crawling, RAG, settings, providers, progress.
@@ -20,8 +20,18 @@ UI: http://localhost:3737
 API: http://localhost:8181
 MCP: http://localhost:8051/mcp
 
+## Database Bootstrap
+This repo uses a single bootstrap SQL for a fresh start:
+
+- Run `migration/complete_setup.sql` in Supabase SQL Editor.
+- This creates the full `ptolemy_*` schema and seeds default settings.
+
+## MCP Tools
+- `rag_get_available_sources`
+- `rag_search_knowledge_base`
+- `rag_search_code_examples`
+- `rag_list_pages_for_source`
+- `rag_read_full_page`
+
 ## Notes
-- If you are upgrading from a legacy schema, run `migration/0.1.0/012_rename_legacy_schema_to_ptolemy.sql` first.
-- MCP tools included: `rag_get_available_sources`, `rag_search_knowledge_base`,
-  `rag_search_code_examples`, `rag_list_pages_for_source`, `rag_read_full_page`.
 - Projects/Agent Work Orders UI and API routes are disabled in this port.

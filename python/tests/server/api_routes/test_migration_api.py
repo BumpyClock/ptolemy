@@ -46,13 +46,13 @@ def mock_pending_migrations():
             version="0.1.0",
             name="003_add_index",
             sql_content="CREATE INDEX idx_test ON test_table(name);",
-            file_path="migration/0.1.0/003_add_index.sql"
+            file_path="migration/003_add_index.sql"
         ),
         PendingMigration(
             version="0.1.0",
             name="004_add_table",
             sql_content="CREATE TABLE new_table (id INT);",
-            file_path="migration/0.1.0/004_add_table.sql"
+            file_path="migration/004_add_table.sql"
         ),
     ]
 
