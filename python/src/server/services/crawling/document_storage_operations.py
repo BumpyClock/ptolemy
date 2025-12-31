@@ -276,6 +276,21 @@ class DocumentStorageOperations:
             url_to_page_id=url_to_page_id,  # Link chunks to pages
         )
 
+        # Update per-page chunk counts
+        chunks_per_page = {}
+        for metadata in all_metadatas:
+            page_id = metadata.get("page_id")
+            if page_id:  # Only count chunks for pages with valid page_id
+                chunks_per_page[page_id] = chunks_per_page.get(page_id, 0) + 1
+
+        # Call update_page_chunk_count for each page with chunks
+        if chunks_per_page:
+            update_tasks = [
+                page_storage_ops.update_page_chunk_count(page_id, count)
+                for page_id, count in chunks_per_page.items()
+            ]
+            await asyncio.gather(*update_tasks, return_exceptions=True)
+
         # Calculate chunk counts
         chunk_count = len(all_contents)
         chunks_stored = storage_stats.get("chunks_stored", 0)

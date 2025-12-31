@@ -2,7 +2,7 @@
 RAG Agent - Conversational Search and Retrieval with PydanticAI
 
 This agent enables users to search and chat with documents stored in the RAG system.
-It uses the perform_rag_query functionality to retrieve relevant content and provide
+It uses the docs_answer functionality to retrieve relevant content and provide
 intelligent responses based on the retrieved information.
 """
 
@@ -139,10 +139,14 @@ class RagAgent(BaseAgent[RagDependencies, str]):
                 if source_filter is None:
                     source_filter = ctx.deps.source_filter
 
-                # Use MCP client to perform RAG query
+                # Use MCP client to perform docs answer
                 mcp_client = await get_mcp_client()
-                result_json = await mcp_client.perform_rag_query(
-                    query=query, source=source_filter, match_count=ctx.deps.match_count
+                result_json = await mcp_client.docs_answer(
+                    query=query,
+                    kind=["doc"],
+                    source_id=source_filter,
+                    match_count=ctx.deps.match_count,
+                    return_mode="chunks",
                 )
 
                 # Parse the JSON response
@@ -160,9 +164,9 @@ class RagAgent(BaseAgent[RagDependencies, str]):
                 # Format results for display
                 formatted_results = []
                 for i, res in enumerate(results, 1):
-                    similarity = res.get("similarity_score", res.get("similarity", 0))
+                    similarity = res.get("score", res.get("similarity_score", res.get("similarity", 0)))
                     metadata = res.get("metadata", {})
-                    source = metadata.get("source", "Unknown")
+                    source = metadata.get("source_id") or metadata.get("source", "Unknown")
                     url = metadata.get("url", res.get("url", ""))
                     content = res.get("content", "")
 
@@ -191,7 +195,7 @@ class RagAgent(BaseAgent[RagDependencies, str]):
             try:
                 # Use MCP client to get available sources
                 mcp_client = await get_mcp_client()
-                result_json = await mcp_client.get_available_sources()
+                result_json = await mcp_client.docs_fetch(kind="sources")
 
                 # Parse the JSON response
                 import json
@@ -201,7 +205,7 @@ class RagAgent(BaseAgent[RagDependencies, str]):
                 if not result.get("success", False):
                     return f"Failed to get sources: {result.get('error', 'Unknown error')}"
 
-                sources = result.get("sources", [])
+                sources = result.get("data", [])
                 if not sources:
                     return "No sources are currently available. You may need to crawl some documentation first."
 
@@ -237,8 +241,12 @@ class RagAgent(BaseAgent[RagDependencies, str]):
 
                 # Use MCP client to search code examples
                 mcp_client = await get_mcp_client()
-                result_json = await mcp_client.search_code_examples(
-                    query=query, source_id=source_filter, match_count=ctx.deps.match_count
+                result_json = await mcp_client.docs_answer(
+                    query=query,
+                    kind=["code_example"],
+                    source_id=source_filter,
+                    match_count=ctx.deps.match_count,
+                    return_mode="chunks",
                 )
 
                 # Parse the JSON response
@@ -255,9 +263,10 @@ class RagAgent(BaseAgent[RagDependencies, str]):
 
                 formatted_examples = []
                 for i, example in enumerate(examples, 1):
-                    similarity = example.get("similarity", 0)
-                    summary = example.get("summary", "No summary")
-                    code = example.get("code", example.get("code_block", ""))
+                    similarity = example.get("score", example.get("similarity", 0))
+                    metadata = example.get("metadata", {})
+                    summary = metadata.get("summary", "No summary")
+                    code = example.get("content", example.get("code_block", ""))
                     url = example.get("url", "")
 
                     # Extract language from code block if available

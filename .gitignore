@@ -29,3 +29,8 @@ UAT/
 
 # Local release notes testing
 release-notes-*.md
+comparison_testing/test_runs/
+
+#.ai_agents files
+.ai_agents/.session_context/
+.ai_agents/plans/

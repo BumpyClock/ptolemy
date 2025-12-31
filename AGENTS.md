@@ -267,9 +267,8 @@ When connected to Claude/Cursor/Windsurf, the following tools are available:
 
 ### Knowledge Base Tools
 
-- `ptolemy:rag_search_knowledge_base` - Search knowledge base for relevant content
-- `ptolemy:rag_search_code_examples` - Find code snippets in the knowledge base
-- `ptolemy:rag_get_available_sources` - List available knowledge sources
+- `ptolemy:docs_answer` - RAG-backed answers from docs and code examples
+- `ptolemy:docs_fetch` - Deterministic retrieval and listing for sources and pages
 
 ### Project Management
 

@@ -98,25 +98,32 @@ class MCPClient:
 
     # Convenience methods for common MCP tools
 
-    async def perform_rag_query(self, query: str, source: str = None, match_count: int = 5) -> str:
-        """Perform a RAG query through MCP."""
-        result = await self.call_tool(
-            "perform_rag_query", query=query, source=source, match_count=match_count
-        )
-        return json.dumps(result) if isinstance(result, dict) else str(result)
-
-    async def get_available_sources(self) -> str:
-        """Get available sources through MCP."""
-        result = await self.call_tool("get_available_sources")
-        return json.dumps(result) if isinstance(result, dict) else str(result)
-
-    async def search_code_examples(
-        self, query: str, source_id: str = None, match_count: int = 5
+    async def docs_answer(
+        self,
+        query: str,
+        kind: list[str] | None = None,
+        source_id: str | None = None,
+        match_count: int = 5,
+        return_mode: str = "chunks",
+        citations: bool = True,
+        debug: bool = False,
     ) -> str:
-        """Search code examples through MCP."""
+        """Answer documentation questions through MCP."""
         result = await self.call_tool(
-            "search_code_examples", query=query, source_id=source_id, match_count=match_count
+            "docs_answer",
+            query=query,
+            kind=kind,
+            source_id=source_id,
+            match_count=match_count,
+            return_mode=return_mode,
+            citations=citations,
+            debug=debug,
         )
+        return json.dumps(result) if isinstance(result, dict) else str(result)
+
+    async def docs_fetch(self, kind: str, **kwargs) -> str:
+        """Fetch documentation data through MCP."""
+        result = await self.call_tool("docs_fetch", kind=kind, **kwargs)
         return json.dumps(result) if isinstance(result, dict) else str(result)
 
     async def manage_project(self, action: str, **kwargs) -> str:

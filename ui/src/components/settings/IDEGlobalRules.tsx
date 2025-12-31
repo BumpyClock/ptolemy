@@ -41,17 +41,17 @@ export const IDEGlobalRules = () => {
 ## RAG Workflow (Research Before Implementation)
 
 ### Searching Specific Documentation:
-1. **Get sources** → \`rag_get_available_sources()\` - Returns list with id, title, url
+1. **Get sources** → \`docs_fetch(kind="sources")\`
 2. **Find source ID** → Match to documentation (e.g., "Supabase docs" → "src_abc123")
-3. **Search** → \`rag_search_knowledge_base(query="vector functions", source_id="src_abc123")\`
+3. **Search** → \`docs_answer(query="vector functions", source_id="src_abc123")\`
 
 ### General Research:
 \`\`\`bash
 # Search knowledge base (2-5 keywords only!)
-rag_search_knowledge_base(query="authentication JWT", match_count=5)
+docs_answer(query="authentication JWT", match_count=5)
 
 # Find code examples
-rag_search_code_examples(query="React hooks", match_count=3)
+docs_answer(query="React hooks", kind=["code_example"], match_count=3)
 \`\`\`
 
 ## Project Workflows
@@ -91,9 +91,8 @@ find_tasks(filter_by="project", filter_value="proj-123")
 - \`manage_task("create"/"update"/"delete", ...)\` - Manage tasks
 
 **Knowledge Base:**
-- \`rag_get_available_sources()\` - List all sources
-- \`rag_search_knowledge_base(query="...", source_id="...")\` - Search docs
-- \`rag_search_code_examples(query="...", source_id="...")\` - Find code
+- \`docs_fetch(kind="sources")\` - List all sources
+- \`docs_answer(query="...", source_id="...")\` - Search docs and code
 
 ## Important Notes
 
@@ -129,17 +128,17 @@ find_tasks(filter_by="project", filter_value="proj-123")
 ## RAG Workflow (Research Before Implementation)
 
 ### Searching Specific Documentation:
-1. **Get sources** → \`rag_get_available_sources()\` - Returns list with id, title, url
+1. **Get sources** → \`docs_fetch(kind="sources")\`
 2. **Find source ID** → Match to documentation (e.g., "Supabase docs" → "src_abc123")
-3. **Search** → \`rag_search_knowledge_base(query="vector functions", source_id="src_abc123")\`
+3. **Search** → \`docs_answer(query="vector functions", source_id="src_abc123")\`
 
 ### General Research:
 \`\`\`bash
 # Search knowledge base (2-5 keywords only!)
-rag_search_knowledge_base(query="authentication JWT", match_count=5)
+docs_answer(query="authentication JWT", match_count=5)
 
 # Find code examples
-rag_search_code_examples(query="React hooks", match_count=3)
+docs_answer(query="React hooks", kind=["code_example"], match_count=3)
 \`\`\`
 
 ## Project Workflows
@@ -179,9 +178,8 @@ find_tasks(filter_by="project", filter_value="proj-123")
 - \`manage_task("create"/"update"/"delete", ...)\` - Manage tasks
 
 **Knowledge Base:**
-- \`rag_get_available_sources()\` - List all sources
-- \`rag_search_knowledge_base(query="...", source_id="...")\` - Search docs
-- \`rag_search_code_examples(query="...", source_id="...")\` - Find code
+- \`docs_fetch(kind="sources")\` - List all sources
+- \`docs_answer(query="...", source_id="...")\` - Search docs and code
 
 ## Important Notes
 

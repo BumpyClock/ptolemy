@@ -3,6 +3,10 @@
     "ptolemy": {
       "type": "http",
       "url": "http://localhost:8051/mcp"
+    },
+    "archon": {
+      "type": "http",
+      "url": "http://localhost:8052/mcp"
     }
   }
 }

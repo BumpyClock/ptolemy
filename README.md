@@ -4,7 +4,7 @@ Ptolemy is a trimmed-down knowledge MCP focused on RAG search and knowledge base
 
 ## Services
 - **API server**: FastAPI backend for knowledge base, crawling, RAG, settings, providers, progress.
-- **MCP server**: FastMCP with RAG-only tools.
+- **MCP server**: FastMCP with docs tools for RAG search and retrieval.
 - **UI**: React/TanStack Query frontend for knowledge management + settings.
 
 ## Quick Start (Docker)
@@ -27,11 +27,8 @@ This repo uses a single bootstrap SQL for a fresh start:
 - This creates the full `ptolemy_*` schema and seeds default settings.
 
 ## MCP Tools
-- `rag_get_available_sources`
-- `rag_search_knowledge_base`
-- `rag_search_code_examples`
-- `rag_list_pages_for_source`
-- `rag_read_full_page`
+- `docs_answer`
+- `docs_fetch`
 
 ## Notes
 - Projects/Agent Work Orders UI and API routes are disabled in this port.

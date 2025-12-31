@@ -125,16 +125,16 @@ def test_register_feature_tools_still_called():
     )
 
 
-def test_register_rag_tools_still_called():
+def test_register_docs_tools_still_called():
     """
-    Test that register_rag_tools is still called in register_modules().
+    Test that register_docs_tools is still called in register_modules().
 
-    This ensures RAG tools remain enabled after removing other registrations.
+    This ensures docs tools remain enabled after removing other registrations.
     """
     mcp_server_path = get_mcp_server_file_path()
-    call_lines = find_function_calls(mcp_server_path, "register_rag_tools")
+    call_lines = find_function_calls(mcp_server_path, "register_docs_tools")
 
     assert len(call_lines) == 1, (
-        f"register_rag_tools should be called exactly once. "
+        f"register_docs_tools should be called exactly once. "
         f"Found {len(call_lines)} call(s) at line(s): {call_lines}"
     )

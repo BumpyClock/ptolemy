@@ -5,7 +5,7 @@ This MCP server uses HTTP calls to the API service instead of importing
 heavy dependencies directly.
 
 Modules:
-- RAG Module: RAG queries, search, and source management via HTTP
+- Docs Module: RAG queries, search, and source management via HTTP
 - Health & Session: Local operations
 
 Note: Crawling and document upload operations are handled by the API service
@@ -190,25 +190,25 @@ async def lifespan(server: FastMCP) -> AsyncIterator[PtolemyContext]:
 MCP_INSTRUCTIONS = """
 # Ptolemy MCP Server Instructions
 
-## 🎯 Targeted Documentation Search
+## Targeted Documentation Search
 
-When searching specific documentation (very common!):
-1. **Get available sources**: `rag_get_available_sources()` - Returns list with id, title, url
-2. **Find source ID**: Match user's request to source title (e.g., "PydanticAI docs" -> find ID)
-3. **Filter search**: `rag_search_knowledge_base(query="...", source_id="src_xxx", match_count=5)`
+When searching specific documentation:
+1. Get available sources: docs_fetch(kind="sources")
+2. Find source ID: match the user request to a source title
+3. Run search: docs_answer(query="...", source_id="src_xxx", match_count=5)
 
 Examples:
 - User: "Search the Supabase docs for vector functions"
-  1. Call `rag_get_available_sources()`
+  1. Call docs_fetch(kind="sources")
   2. Find Supabase source ID from results (e.g., "src_abc123")
-  3. Call `rag_search_knowledge_base(query="vector functions", source_id="src_abc123")`
+  3. Call docs_answer(query="vector functions", source_id="src_abc123")
 
 - User: "Find authentication examples in the MCP documentation"
-  1. Call `rag_get_available_sources()`
+  1. Call docs_fetch(kind="sources")
   2. Find MCP docs source ID
-  3. Call `rag_search_code_examples(query="authentication", source_id="src_def456")`
+  3. Call docs_answer(query="authentication", kind=["code_example"], source_id="src_def456")
 
-IMPORTANT: Always use source_id (not URLs or domain names) for filtering!
+IMPORTANT: Always use source_id for filtering
 """
 
 
@@ -326,17 +326,17 @@ def register_modules():
 
     modules_registered = 0
 
-    # Import and register RAG module (HTTP-based version)
+    # Import and register docs module (HTTP-based version)
     try:
-        from src.mcp_server.features.rag import register_rag_tools
+        from src.mcp_server.features.docs import register_docs_tools
 
-        register_rag_tools(mcp)
+        register_docs_tools(mcp)
         modules_registered += 1
-        logger.info("✓ RAG module registered (HTTP-based)")
+        logger.info("✓ Docs module registered (HTTP-based)")
     except ImportError as e:
-        logger.warning(f"⚠ RAG module not available: {e}")
+        logger.warning(f"⚠ Docs module not available: {e}")
     except Exception as e:
-        logger.error(f"✗ Error registering RAG module: {e}")
+        logger.error(f"✗ Error registering Docs module: {e}")
         logger.error(traceback.format_exc())
 
     logger.info(f"📦 Total modules registered: {modules_registered}")
