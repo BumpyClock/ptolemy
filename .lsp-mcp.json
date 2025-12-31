@@ -1,0 +1,7 @@
+{
+  "languages": ["python", "typescript", "javascript"],
+  "tools": {
+    "preset": "standard",
+    "disable": ["initialSetup"]
+  }
+}

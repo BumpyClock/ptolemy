@@ -6,15 +6,21 @@ Handles extraction, processing, and storage of code examples from documents.
 
 import asyncio
 import re
+from collections import defaultdict, deque
 from collections.abc import Callable
 from typing import Any
 
 from ...config.logfire_config import safe_logfire_error, safe_logfire_info
 from ...services.credential_service import credential_service
+from ..embeddings.embedding_service import create_embeddings_batch
+from ..embeddings.contextual_embedding_service import generate_contextual_embeddings_batch
+from ..llm_provider_service import get_embedding_model
 from ..storage.code_storage_service import (
     add_code_examples_to_supabase,
     generate_code_summaries_batch,
 )
+
+SUMMARY_PENDING_TEXT = "Summary pending"
 
 
 class CodeExtractionService:
@@ -132,6 +138,10 @@ class CodeExtractionService:
         """Check if code summaries generation is enabled."""
         return await self._get_setting("ENABLE_CODE_SUMMARIES", True)
 
+    async def _should_defer_code_summaries(self) -> bool:
+        """Check if code summaries should be deferred until after storage."""
+        return await self._get_setting("DEFER_CODE_SUMMARIES", False)
+
     async def extract_and_store_code_examples(
         self,
         crawl_results: list[dict[str, Any]],
@@ -220,13 +230,25 @@ class CodeExtractionService:
                 await progress_callback(data)
             summary_callback = summary_progress
 
-        # Generate summaries for code blocks
-        summary_results = await self._generate_code_summaries(
-            all_code_blocks, summary_callback, cancellation_check, provider
-        )
+        summaries_enabled = await self._is_code_summaries_enabled()
+        defer_summaries = summaries_enabled and await self._should_defer_code_summaries()
+
+        if defer_summaries:
+            safe_logfire_info(
+                f"Deferring code summaries until after storage | blocks={len(all_code_blocks)}"
+            )
+            summary_results = self._build_placeholder_summary_results(all_code_blocks)
+        else:
+            summary_results = await self._generate_code_summaries(
+                all_code_blocks, summary_callback, cancellation_check, provider
+            )
 
         # Prepare code examples for storage
-        storage_data = self._prepare_code_examples_for_storage(all_code_blocks, summary_results)
+        storage_data = self._prepare_code_examples_for_storage(
+            all_code_blocks,
+            summary_results,
+            summary_pending=defer_summaries,
+        )
 
         # Phase 3: Store in database (90-100% of overall progress)
         storage_callback = None
@@ -246,14 +268,67 @@ class CodeExtractionService:
                 await progress_callback(data)
             storage_callback = storage_progress
 
-        # Store code examples in database
-        return await self._store_code_examples(
+        if defer_summaries:
+            storage_callback = None
+
+        stored_count = await self._store_code_examples(
             storage_data,
             url_to_full_document,
             storage_callback,
             provider,
             embedding_provider,
         )
+
+        if defer_summaries:
+            if progress_callback:
+                await progress_callback({
+                    "status": "summarizing",
+                    "progress": 0,
+                    "log": f"Summarizing {len(all_code_blocks)} code examples",
+                    "completed_summaries": 0,
+                    "total_summaries": len(all_code_blocks),
+                })
+
+            summary_results = await self._generate_code_summaries(
+                all_code_blocks,
+                summary_callback,
+                cancellation_check,
+                provider,
+                status_override="summarizing",
+            )
+            await self._update_code_examples_with_summaries(
+                all_code_blocks,
+                summary_results,
+                summary_pending=False,
+            )
+
+            if progress_callback:
+                await progress_callback({
+                    "status": "summarizing",
+                    "progress": 95,
+                    "log": "Re-embedding code examples with updated summaries",
+                    "completed_summaries": len(all_code_blocks),
+                    "total_summaries": len(all_code_blocks),
+                })
+
+            await self._reembed_code_examples(
+                all_code_blocks,
+                summary_results,
+                url_to_full_document,
+                embedding_provider,
+                progress_callback,
+            )
+
+            if progress_callback:
+                await progress_callback({
+                    "status": "summarizing",
+                    "progress": 100,
+                    "log": "Code summaries and embeddings updated",
+                    "completed_summaries": len(all_code_blocks),
+                    "total_summaries": len(all_code_blocks),
+                })
+
+        return stored_count
 
     async def _extract_code_blocks_from_documents(
         self,
@@ -1564,6 +1639,7 @@ class CodeExtractionService:
         progress_callback: Callable | None = None,
         cancellation_check: Callable[[], None] | None = None,
         provider: str | None = None,
+        status_override: str | None = None,
     ) -> list[dict[str, str]]:
         """
         Generate summaries for all code blocks.
@@ -1596,8 +1672,7 @@ class CodeExtractionService:
 
         # Progress is handled by generate_code_summaries_batch
 
-        # Use default max workers
-        max_workers = 3
+        max_workers = await self._get_setting("CODE_SUMMARY_MAX_WORKERS", 3)
 
         # Extract just the code blocks for batch processing
         code_blocks_for_summaries = [item["block"] for item in all_code_blocks]
@@ -1619,8 +1694,7 @@ class CodeExtractionService:
                         await progress_callback(data)
                         raise
 
-                # Ensure status is code_extraction
-                data["status"] = "code_extraction"
+                data["status"] = status_override or "code_extraction"
                 # Pass through the raw progress (0-100)
                 await progress_callback(data)
 
@@ -1648,8 +1722,46 @@ class CodeExtractionService:
             # Let the caller handle cancellation (upstream emits the cancel progress)
             raise
 
+    def _build_placeholder_summary_results(self, all_code_blocks: list[dict[str, Any]]) -> list[dict[str, str]]:
+        placeholder_summaries = []
+        for item in all_code_blocks:
+            block = item["block"]
+            language = block.get("language", "")
+            example_name = f"Code Example{f' ({language})' if language else ''}"
+            placeholder_summaries.append({
+                "example_name": example_name,
+                "summary": SUMMARY_PENDING_TEXT,
+            })
+        return placeholder_summaries
+
+    def _build_code_metadata(
+        self,
+        block: dict[str, Any],
+        source_url: str,
+        source_id: str,
+        example_name: str,
+        summary_pending: bool,
+    ) -> dict[str, Any]:
+        summary_status = "pending" if summary_pending else "ready"
+        return {
+            "chunk_index": None,
+            "url": source_url,
+            "source": source_id,
+            "source_id": source_id,
+            "language": block.get("language", ""),
+            "char_count": len(block["code"]),
+            "word_count": len(block["code"].split()),
+            "example_name": example_name,
+            "title": example_name,
+            "summary_status": summary_status,
+            "summary_pending": summary_pending,
+        }
+
     def _prepare_code_examples_for_storage(
-        self, all_code_blocks: list[dict[str, Any]], summary_results: list[dict[str, str]]
+        self,
+        all_code_blocks: list[dict[str, Any]],
+        summary_results: list[dict[str, str]],
+        summary_pending: bool = False,
     ) -> dict[str, list[Any]]:
         """
         Prepare code examples for storage by organizing data into arrays.
@@ -1682,17 +1794,8 @@ class CodeExtractionService:
             code_examples.append(block["code"])
             code_summaries.append(summary)
 
-            code_meta = {
-                "chunk_index": len(code_examples) - 1,
-                "url": source_url,
-                "source": source_id,
-                "source_id": source_id,
-                "language": block.get("language", ""),
-                "char_count": len(block["code"]),
-                "word_count": len(block["code"].split()),
-                "example_name": example_name,
-                "title": example_name,
-            }
+            code_meta = self._build_code_metadata(block, source_url, source_id, example_name, summary_pending)
+            code_meta["chunk_index"] = len(code_examples) - 1
             code_metadatas.append(code_meta)
 
         return {
@@ -1779,3 +1882,189 @@ class CodeExtractionService:
         except Exception as e:
             safe_logfire_error(f"Error storing code examples | error={e}")
             raise RuntimeError("Failed to store code examples") from e
+
+    async def _update_code_examples_with_summaries(
+        self,
+        all_code_blocks: list[dict[str, Any]],
+        summary_results: list[dict[str, str]],
+        summary_pending: bool,
+    ) -> None:
+        existing_metadata: dict[tuple[str, int], dict[str, Any]] = {}
+        if all_code_blocks:
+            source_id = all_code_blocks[0]["source_id"]
+            try:
+                result = (
+                    self.supabase_client.table("ptolemy_code_examples")
+                    .select("url, chunk_number, metadata")
+                    .eq("source_id", source_id)
+                    .execute()
+                )
+                for row in result.data or []:
+                    key = (row.get("url", ""), int(row.get("chunk_number", 0)))
+                    existing_metadata[key] = row.get("metadata") or {}
+            except Exception as e:
+                safe_logfire_error(
+                    f"Failed to load existing code example metadata | source_id={source_id} | error={str(e)}"
+                )
+
+        total_items = min(len(all_code_blocks), len(summary_results))
+        for index in range(total_items):
+            code_item = all_code_blocks[index]
+            block = code_item["block"]
+            source_url = code_item["source_url"]
+            source_id = code_item["source_id"]
+            summary_result = summary_results[index]
+
+            if isinstance(summary_result, dict):
+                summary = summary_result.get("summary", "Code example for demonstration purposes.")
+                example_name = summary_result.get("example_name", "Code Example")
+            else:
+                summary = "Code example for demonstration purposes."
+                example_name = "Code Example"
+
+            base_metadata = existing_metadata.get((source_url, index), {})
+            metadata = {
+                **base_metadata,
+                **self._build_code_metadata(block, source_url, source_id, example_name, summary_pending),
+            }
+            metadata["chunk_index"] = index
+
+            try:
+                (
+                    self.supabase_client.table("ptolemy_code_examples")
+                    .update({"summary": summary, "metadata": metadata})
+                    .eq("source_id", source_id)
+                    .eq("url", source_url)
+                    .eq("chunk_number", index)
+                    .execute()
+                )
+            except Exception as e:
+                safe_logfire_error(
+                    f"Failed to update code summary | source_id={source_id} | url={source_url} | chunk_number={index} | error={str(e)}"
+                )
+
+    async def _reembed_code_examples(
+        self,
+        all_code_blocks: list[dict[str, Any]],
+        summary_results: list[dict[str, str]],
+        url_to_full_document: dict[str, str],
+        embedding_provider: str | None,
+        progress_callback: Callable | None = None,
+    ) -> None:
+        total_items = min(len(all_code_blocks), len(summary_results))
+        if total_items == 0:
+            return
+
+        combined_texts = []
+        original_indices: list[int] = []
+        for index in range(total_items):
+            code_item = all_code_blocks[index]
+            block = code_item["block"]
+            code = block.get("code", "")
+            if not code:
+                continue
+
+            summary_result = summary_results[index]
+            if isinstance(summary_result, dict):
+                summary = summary_result.get("summary", "Code example for demonstration purposes.")
+            else:
+                summary = "Code example for demonstration purposes."
+
+            combined_texts.append(f"{code}\n\nSummary: {summary}")
+            original_indices.append(index)
+
+        if not combined_texts:
+            return
+
+        if progress_callback:
+            await progress_callback({
+                "status": "summarizing",
+                "progress": 95,
+                "log": f"Re-embedding {len(combined_texts)} code examples",
+            })
+
+        try:
+            use_contextual_embeddings = False
+            try:
+                raw_value = await credential_service.get_credential(
+                    "USE_CONTEXTUAL_EMBEDDINGS", "false", decrypt=True
+                )
+                if isinstance(raw_value, str):
+                    use_contextual_embeddings = raw_value.lower() == "true"
+                else:
+                    use_contextual_embeddings = bool(raw_value)
+            except Exception as e:
+                safe_logfire_error(f"Error reading contextual embeddings setting | error={e}")
+                use_contextual_embeddings = False
+
+            batch_texts = combined_texts
+            if use_contextual_embeddings and url_to_full_document:
+                full_documents = []
+                for index in original_indices:
+                    url = all_code_blocks[index]["source_url"]
+                    full_documents.append(url_to_full_document.get(url, ""))
+                contextual_results = await generate_contextual_embeddings_batch(full_documents, combined_texts)
+                batch_texts = [contextual_text for contextual_text, _ in contextual_results]
+
+            result = await create_embeddings_batch(batch_texts, provider=embedding_provider)
+
+            if result.has_failures:
+                safe_logfire_error(
+                    f"Failed to create {result.failure_count} updated code embeddings | successful={result.success_count}"
+                )
+
+            if not result.embeddings:
+                return
+
+            embedding_model_name = await get_embedding_model(provider=embedding_provider)
+
+            positions_by_text = defaultdict(deque)
+            for idx, text in enumerate(batch_texts):
+                positions_by_text[text].append(original_indices[idx])
+
+            for embedding, text in zip(result.embeddings, result.texts_processed, strict=True):
+                if not positions_by_text[text]:
+                    safe_logfire_error(
+                        f"Could not map updated embedding to code example | text_preview={text[:50]}"
+                    )
+                    continue
+
+                orig_idx = positions_by_text[text].popleft()
+                code_item = all_code_blocks[orig_idx]
+                source_url = code_item["source_url"]
+                source_id = code_item["source_id"]
+
+                embedding_dim = len(embedding) if isinstance(embedding, list) else len(embedding.tolist())
+                if embedding_dim == 768:
+                    embedding_column = "embedding_768"
+                elif embedding_dim == 1024:
+                    embedding_column = "embedding_1024"
+                elif embedding_dim == 1536:
+                    embedding_column = "embedding_1536"
+                elif embedding_dim == 3072:
+                    embedding_column = "embedding_3072"
+                else:
+                    safe_logfire_error(
+                        f"Unsupported embedding dimension {embedding_dim} for code example update | source_id={source_id}"
+                    )
+                    continue
+
+                try:
+                    (
+                        self.supabase_client.table("ptolemy_code_examples")
+                        .update({
+                            embedding_column: embedding,
+                            "embedding_model": embedding_model_name,
+                            "embedding_dimension": embedding_dim,
+                        })
+                        .eq("source_id", source_id)
+                        .eq("url", source_url)
+                        .eq("chunk_number", orig_idx)
+                        .execute()
+                    )
+                except Exception as e:
+                    safe_logfire_error(
+                        f"Failed to update code example embedding | source_id={source_id} | url={source_url} | chunk_number={orig_idx} | error={str(e)}"
+                    )
+        except Exception as e:
+            safe_logfire_error(f"Failed to re-embed code examples | error={str(e)}")

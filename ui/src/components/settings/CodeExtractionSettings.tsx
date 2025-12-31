@@ -20,6 +20,7 @@ interface CodeExtractionSettingsProps {
     CODE_EXTRACTION_MAX_WORKERS: number;
     CONTEXT_WINDOW_SIZE: number;
     ENABLE_CODE_SUMMARIES: boolean;
+    DEFER_CODE_SUMMARIES: boolean;
   };
   setCodeExtractionSettings: (settings: any) => void;
 }
@@ -175,6 +176,16 @@ export const CodeExtractionSettings = ({
               })}
               label="Generate Code Summaries"
               description="Use AI to create summaries and names for code examples"
+            />
+            <CustomCheckbox
+              id="deferCodeSummaries"
+              checked={codeExtractionSettings.DEFER_CODE_SUMMARIES}
+              onChange={e => setCodeExtractionSettings({
+                ...codeExtractionSettings,
+                DEFER_CODE_SUMMARIES: e.target.checked
+              })}
+              label="Defer Code Summaries"
+              description="Store code examples immediately and generate summaries after ingestion"
             />
           </div>
         </div>

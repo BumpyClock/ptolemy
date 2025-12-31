@@ -1013,6 +1013,7 @@ async def _generate_summary_with_client(
         }
 
 
+# TODO: Batch multiple code blocks per LLM request to reduce latency once prompt format supports arrays
 async def generate_code_summaries_batch(
     code_blocks: list[dict[str, Any]], max_workers: int = None, progress_callback=None, provider: str = None
 ) -> list[dict[str, str]]:
@@ -1048,6 +1049,32 @@ async def generate_code_summaries_batch(
         f"Generating summaries for {len(code_blocks)} code blocks with max_workers={max_workers}"
     )
 
+    min_delay_ms = int(os.getenv("CODE_SUMMARY_MIN_DELAY_MS", "50"))
+    max_delay_ms = int(os.getenv("CODE_SUMMARY_MAX_DELAY_MS", "1000"))
+    min_delay_ms = max(0, min_delay_ms)
+    max_delay_ms = max(min_delay_ms, max_delay_ms)
+    delay_state = {"current_ms": min_delay_ms}
+    delay_lock = asyncio.Lock()
+
+    def _is_rate_limit_error(error: Exception) -> bool:
+        message = str(error).lower()
+        return "rate limit" in message or "ratelimit" in message or "429" in message
+
+    async def _get_delay_seconds() -> float:
+        async with delay_lock:
+            return delay_state["current_ms"] / 1000.0
+
+    async def _increase_delay() -> None:
+        async with delay_lock:
+            current_ms = delay_state["current_ms"]
+            next_ms = int(current_ms * 2) if current_ms > 0 else min_delay_ms
+            delay_state["current_ms"] = min(max_delay_ms, max(min_delay_ms, next_ms))
+
+    async def _decrease_delay() -> None:
+        async with delay_lock:
+            current_ms = delay_state["current_ms"]
+            delay_state["current_ms"] = max(min_delay_ms, current_ms - 10)
+
     # Create a shared LLM client for all summaries (performance optimization)
     async with get_llm_client(provider=provider) as shared_client:
         search_logger.debug("Created shared LLM client for batch summary generation")
@@ -1060,18 +1087,25 @@ async def generate_code_summaries_batch(
         async def generate_single_summary_with_limit(block: dict[str, Any]) -> dict[str, str]:
             nonlocal completed_count
             async with semaphore:
-                # Add delay between requests to avoid rate limiting
-                await asyncio.sleep(0.5)  # 500ms delay between requests
+                delay_seconds = await _get_delay_seconds()
+                if delay_seconds > 0:
+                    await asyncio.sleep(delay_seconds)
 
                 # Call async version directly with shared client (no event loop overhead)
-                result = await _generate_code_example_summary_async(
-                    block["code"],
-                    block["context_before"],
-                    block["context_after"],
-                    block.get("language", ""),
-                    provider,
-                    shared_client  # Pass shared client for reuse
-                )
+                try:
+                    result = await _generate_code_example_summary_async(
+                        block["code"],
+                        block["context_before"],
+                        block["context_after"],
+                        block.get("language", ""),
+                        provider,
+                        shared_client  # Pass shared client for reuse
+                    )
+                    await _decrease_delay()
+                except Exception as error:
+                    if _is_rate_limit_error(error):
+                        await _increase_delay()
+                    raise
 
                 # Update progress
                 async with lock:

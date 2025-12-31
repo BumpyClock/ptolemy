@@ -108,6 +108,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             api_logger.warning(f"Could not initialize prompt service: {e}")
 
+        try:
+            from .services.search.reranking_strategy import preload_reranking_strategy
+
+            enabled, loaded = preload_reranking_strategy()
+            if enabled and loaded:
+                api_logger.info("Reranking model preloaded")
+            elif enabled:
+                api_logger.warning("Reranking preload failed")
+            else:
+                api_logger.info("Reranking disabled")
+        except Exception:
+            api_logger.warning("Reranking preload failed", exc_info=True)
 
         # MCP Client functionality removed from architecture
         # Agents now use MCP tools directly

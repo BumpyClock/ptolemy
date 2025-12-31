@@ -136,6 +136,7 @@ export const CrawlingProgress: React.FC<CrawlingProgressProps> = ({ onSwitchToBr
             "source_creation",
             "document_storage",
             "code_extraction",
+            "summarizing",
           ].includes(operation.status);
 
           return (

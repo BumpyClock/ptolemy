@@ -54,6 +54,7 @@ export const SettingsPage = () => {
       CODE_EXTRACTION_MAX_WORKERS: 3,
       CONTEXT_WINDOW_SIZE: 1000,
       ENABLE_CODE_SUMMARIES: true,
+      DEFER_CODE_SUMMARIES: false,
     });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

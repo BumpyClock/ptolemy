@@ -21,6 +21,15 @@ RUN_DIR="${COMPARISON_DIR}/test_runs/codex/${RUN_START_TIME}"
 AGENTS_DIR="${RUN_DIR}/agents"
 REVIEW_TEMPLATE_PATH="${COMPARISON_DIR}/review_prompt.md"
 
+CODEX_MODEL="${CODEX_MODEL:-}"
+CODEX_RUN_THINKING="medium"
+CODEX_REVIEW_THINKING="high"
+CODEX_RUN_ARGS_RAW="${CODEX_RUN_ARGS:-}"
+CODEX_REVIEW_ARGS_RAW="${CODEX_REVIEW_ARGS:-}"
+
+read -r -a CODEX_RUN_ARGS <<< "${CODEX_RUN_ARGS_RAW}"
+read -r -a CODEX_REVIEW_ARGS <<< "${CODEX_REVIEW_ARGS_RAW}"
+
 mkdir -p "${AGENTS_DIR}"
 
 log "Stage: setup directories"
@@ -43,6 +52,11 @@ fi
 
 log "Run directory: ${RUN_DIR}"
 log "Prompt file: ${PROMPT_PATH}"
+if [[ -n "${CODEX_MODEL}" ]]; then
+  log "Codex model: ${CODEX_MODEL}"
+fi
+log "Codex thinking (runs): ${CODEX_RUN_THINKING}"
+log "Codex thinking (review): ${CODEX_REVIEW_THINKING}"
 
 total_runs=10
 pids=()
@@ -52,9 +66,16 @@ for i in $(seq 1 "${total_runs}"); do
   out_file="${AGENTS_DIR}/run_${run_id}.txt"
   log_file="${AGENTS_DIR}/run_${run_id}.log"
   log "Starting run ${run_id}"
-  codex exec - \
-    -C "${ROOT_DIR}" \
-    --output-last-message "${out_file}" \
+  codex_args=()
+  codex_args+=("exec" "-")
+  codex_args+=("-C" "${ROOT_DIR}")
+  if [[ -n "${CODEX_MODEL}" ]]; then
+    codex_args+=("--model" "${CODEX_MODEL}")
+  fi
+  codex_args+=("--config" "thinking=${CODEX_RUN_THINKING}")
+  codex_args+=("--output-last-message" "${out_file}")
+  codex_args+=(${CODEX_RUN_ARGS[@]+"${CODEX_RUN_ARGS[@]}"})
+  codex "${codex_args[@]}" \
     < "${PROMPT_PATH}" \
     > "${log_file}" 2>&1 &
   pids+=("$!")
@@ -83,9 +104,16 @@ sed -e "s|{{AGENTS_DIR}}|${AGENTS_DIR}|g" \
 CONSOLIDATED_OUT="${RUN_DIR}/consolidated.txt"
 CONSOLIDATED_LOG="${RUN_DIR}/consolidated.log"
 log "Stage: running consolidation"
-codex exec - \
-  -C "${ROOT_DIR}" \
-  --output-last-message "${CONSOLIDATED_OUT}" \
+consolidation_args=()
+consolidation_args+=("exec" "-")
+consolidation_args+=("-C" "${ROOT_DIR}")
+if [[ -n "${CODEX_MODEL}" ]]; then
+  consolidation_args+=("--model" "${CODEX_MODEL}")
+fi
+consolidation_args+=("--config" "thinking=${CODEX_REVIEW_THINKING}")
+consolidation_args+=("--output-last-message" "${CONSOLIDATED_OUT}")
+consolidation_args+=(${CODEX_REVIEW_ARGS[@]+"${CODEX_REVIEW_ARGS[@]}"})
+codex "${consolidation_args[@]}" \
   < "${REVIEW_PROMPT_PATH}" \
   > "${CONSOLIDATED_LOG}" 2>&1
 

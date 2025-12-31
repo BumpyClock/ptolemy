@@ -43,6 +43,8 @@ export interface CodeExampleMetadata {
   file_path?: string;
   summary?: string;
   relevance_score?: number;
+  summary_status?: "pending" | "ready";
+  summary_pending?: boolean;
   // No additional flexible properties - use strict typing
 }
 

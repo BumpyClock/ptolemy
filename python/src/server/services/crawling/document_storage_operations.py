@@ -268,7 +268,6 @@ class DocumentStorageOperations:
             contents=all_contents,  # Individual chunks
             metadatas=all_metadatas,  # Metadata per chunk
             url_to_full_document=url_to_full_document,
-            batch_size=25,  # Increased from 10 for better performance
             progress_callback=progress_callback,  # Pass the callback for progress updates
             enable_parallel_batches=True,  # Enable parallel processing
             provider=None,  # Use configured provider

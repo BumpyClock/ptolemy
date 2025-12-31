@@ -605,6 +605,7 @@ async def initialize_credentials() -> None:
     # - CODE_EXTRACTION_MAX_WORKERS
     # - CONTEXT_WINDOW_SIZE
     # - ENABLE_CODE_SUMMARIES
+    # - DEFER_CODE_SUMMARIES
 
     # Set infrastructure credentials
     for key in infrastructure_credentials:

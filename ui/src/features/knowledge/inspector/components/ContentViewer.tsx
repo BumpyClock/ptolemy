@@ -3,7 +3,7 @@
  * Displays the selected document or code content
  */
 
-import { Check, Code, Copy, FileText, Layers } from "lucide-react";
+import { Check, Code, Copy, FileText, Layers, Loader2 } from "lucide-react";
 import Prism from "prismjs";
 import ReactMarkdown from "react-markdown";
 import { Button } from "../../../ui/primitives";
@@ -78,6 +78,12 @@ export const ContentViewer: React.FC<ContentViewerProps> = ({ selectedItem, onCo
     return cleaned.trim();
   };
 
+  const codeMetadata = selectedItem.type === "code"
+    ? (selectedItem.metadata as { summary?: string; summary_status?: string; summary_pending?: boolean } | undefined)
+    : undefined;
+  const isSummaryPending =
+    codeMetadata?.summary_pending || codeMetadata?.summary_status === "pending" || codeMetadata?.summary === "Summary pending";
+
   return (
     <div className="flex flex-col h-full">
       {/* Content Header - Fixed with proper overflow handling */}
@@ -128,12 +134,15 @@ export const ContentViewer: React.FC<ContentViewerProps> = ({ selectedItem, onCo
                       </span>
                     )}
                 </div>
-                {selectedItem.type === "code" &&
-                  selectedItem.metadata &&
-                  "summary" in selectedItem.metadata &&
-                  selectedItem.metadata.summary && (
-                    <p className="text-xs text-gray-400 mt-1 line-clamp-2">{selectedItem.metadata.summary}</p>
-                  )}
+                {selectedItem.type === "code" && isSummaryPending && (
+                  <p className="text-xs text-yellow-400 mt-1 line-clamp-2 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Summarizing code example...
+                  </p>
+                )}
+                {selectedItem.type === "code" && !isSummaryPending && codeMetadata?.summary && (
+                  <p className="text-xs text-gray-400 mt-1 line-clamp-2">{codeMetadata.summary}</p>
+                )}
               </>
             )}
           </div>

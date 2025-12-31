@@ -48,15 +48,36 @@ router = APIRouter(prefix="/api", tags=["knowledge"])
 # - CRAWL_MAX_CONCURRENT: Max number of pages that can be crawled in parallel within a single crawl operation
 #   Example: While crawling site1.com, fetch up to 10 pages simultaneously
 #
-# The hardcoded limit of 3 protects the server from being overwhelmed by multiple users
+# The default limit of 3 protects the server from being overwhelmed by multiple users
 # starting crawls at the same time. Each crawl can still process many pages in parallel.
-CONCURRENT_CRAWL_LIMIT = 3  # Max simultaneous crawl operations (protects server resources)
-crawl_semaphore = asyncio.Semaphore(CONCURRENT_CRAWL_LIMIT)
+DEFAULT_CONCURRENT_CRAWL_LIMIT = 3  # Max simultaneous crawl operations (protects server resources)
+crawl_semaphore: asyncio.Semaphore | None = None
+crawl_semaphore_limit: int | None = None
+crawl_semaphore_lock = asyncio.Lock()
 
 # Track active async crawl tasks for cancellation support
 active_crawl_tasks: dict[str, asyncio.Task] = {}
 
 
+
+
+async def _get_crawl_semaphore() -> asyncio.Semaphore:
+    global crawl_semaphore, crawl_semaphore_limit
+
+    try:
+        settings = await credential_service.get_credentials_by_category("rag_strategy")
+        raw_limit = settings.get("CONCURRENT_CRAWL_LIMIT", str(DEFAULT_CONCURRENT_CRAWL_LIMIT))
+        limit = int(raw_limit)
+    except Exception:
+        limit = DEFAULT_CONCURRENT_CRAWL_LIMIT
+
+    limit = max(1, min(10, limit))
+
+    async with crawl_semaphore_lock:
+        if crawl_semaphore is None or crawl_semaphore_limit != limit:
+            crawl_semaphore = asyncio.Semaphore(limit)
+            crawl_semaphore_limit = limit
+        return crawl_semaphore
 
 
 async def _validate_provider_api_key(provider: str = None) -> None:
@@ -692,7 +713,8 @@ async def refresh_knowledge_item(source_id: str):
         # Create a wrapped task that acquires the semaphore
         async def _perform_refresh_with_semaphore():
             try:
-                async with crawl_semaphore:
+                semaphore = await _get_crawl_semaphore()
+                async with semaphore:
                     safe_logfire_info(
                         f"Acquired crawl semaphore for refresh | source_id={source_id}"
                     )
@@ -809,7 +831,8 @@ async def _perform_crawl_with_progress(
 ):
     """Perform the actual crawl operation with progress tracking using service layer."""
     # Acquire semaphore to limit concurrent crawls
-    async with crawl_semaphore:
+    semaphore = await _get_crawl_semaphore()
+    async with semaphore:
         safe_logfire_info(
             f"Acquired crawl semaphore | progress_id={progress_id} | url={str(request.url)}"
         )

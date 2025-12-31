@@ -156,6 +156,7 @@ interface RAGSettingsProps {
     // Crawling Performance Settings
     CRAWL_BATCH_SIZE?: number;
     CRAWL_MAX_CONCURRENT?: number;
+    CONCURRENT_CRAWL_LIMIT?: number;
     CRAWL_WAIT_STRATEGY?: string;
     CRAWL_PAGE_TIMEOUT?: number;
     CRAWL_DELAY_BEFORE_HTML?: number;
@@ -1985,6 +1986,23 @@ const manualTestConnection = async (
                     className="w-full px-3 py-2 border border-green-500/30 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Pages to crawl in parallel per operation (1-20)</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Concurrent Crawls
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={ragSettings.CONCURRENT_CRAWL_LIMIT || 3}
+                    onChange={e => setRagSettings({
+                      ...ragSettings,
+                      CONCURRENT_CRAWL_LIMIT: parseInt(e.target.value, 10) || 3
+                    })}
+                    className="w-full px-3 py-2 border border-green-500/30 rounded-md bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Max simultaneous crawl operations across the server (1-10)</p>
                 </div>
               </div>
               

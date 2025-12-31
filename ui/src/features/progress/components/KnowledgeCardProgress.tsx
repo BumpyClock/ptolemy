@@ -28,6 +28,7 @@ export const KnowledgeCardProgress: React.FC<KnowledgeCardProgressProps> = ({ op
     "source_creation",
     "document_storage",
     "code_extraction",
+    "summarizing",
   ].includes(operation.status);
 
   // Don't show if not active

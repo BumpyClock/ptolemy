@@ -23,7 +23,7 @@ from .agentic_rag_strategy import AgenticRAGStrategy
 # Import all strategies
 from .base_search_strategy import BaseSearchStrategy
 from .hybrid_search_strategy import HybridSearchStrategy
-from .reranking_strategy import RerankingStrategy
+from .reranking_strategy import get_reranking_strategy
 
 logger = get_logger(__name__)
 
@@ -52,8 +52,11 @@ class RAGService:
         use_reranking = self.get_bool_setting("USE_RERANKING", False)
         if use_reranking:
             try:
-                self.reranking_strategy = RerankingStrategy()
-                logger.info("Reranking strategy loaded successfully")
+                self.reranking_strategy = get_reranking_strategy()
+                if self.reranking_strategy is not None:
+                    logger.info("Reranking strategy loaded successfully")
+                else:
+                    logger.warning("Reranking strategy unavailable")
             except Exception as e:
                 logger.warning(f"Failed to load reranking strategy: {e}")
                 self.reranking_strategy = None

@@ -5,10 +5,11 @@ Implements result reranking using CrossEncoder models to improve search result o
 The reranking process re-scores search results based on query-document relevance using
 a trained neural model, typically improving precision over initial retrieval scores.
 
-Uses the cross-encoder/ms-marco-MiniLM-L-6-v2 model for reranking by default.
+Uses the cross-encoder/ms-marco-MiniLM-L6-v2 model for reranking by default.
 """
 
 import os
+import threading
 from typing import Any
 
 try:
@@ -24,7 +25,7 @@ from ...config.logfire_config import get_logger, safe_span
 logger = get_logger(__name__)
 
 # Default reranking model
-DEFAULT_RERANKING_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+DEFAULT_RERANKING_MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
 
 
 class RerankingStrategy:
@@ -231,3 +232,62 @@ class RerankingConfig:
             "model_name": os.getenv("RERANKING_MODEL", DEFAULT_RERANKING_MODEL),
             "top_k": int(os.getenv("RERANKING_TOP_K", "0")) or None,
         }
+
+
+_RERANKING_LOCK = threading.Lock()
+_RERANKING_STRATEGY: "RerankingStrategy | None" = None
+_RERANKING_LOAD_ATTEMPTED = False
+
+
+def _get_setting(key: str, default: str = "false") -> str:
+    try:
+        from ..credential_service import credential_service
+
+        if hasattr(credential_service, "_cache") and credential_service._cache_initialized:
+            cached_value = credential_service._cache.get(key)
+            if isinstance(cached_value, dict) and cached_value.get("is_encrypted"):
+                encrypted_value = cached_value.get("encrypted_value")
+                if encrypted_value:
+                    try:
+                        return credential_service._decrypt_value(encrypted_value)
+                    except Exception:
+                        pass
+            elif cached_value:
+                return str(cached_value)
+        return os.getenv(key, default)
+    except Exception:
+        return os.getenv(key, default)
+
+
+def _get_bool_setting(key: str, default: bool = False) -> bool:
+    value = _get_setting(key, "true" if default else "false")
+    return value.lower() in ("true", "1", "yes", "on")
+
+
+def get_reranking_strategy(
+    model_name: str = DEFAULT_RERANKING_MODEL,
+) -> "RerankingStrategy | None":
+    global _RERANKING_STRATEGY
+    global _RERANKING_LOAD_ATTEMPTED
+
+    if _RERANKING_STRATEGY is not None or _RERANKING_LOAD_ATTEMPTED:
+        return _RERANKING_STRATEGY
+
+    with _RERANKING_LOCK:
+        if _RERANKING_STRATEGY is not None or _RERANKING_LOAD_ATTEMPTED:
+            return _RERANKING_STRATEGY
+
+        strategy = RerankingStrategy(model_name=model_name)
+        if strategy.is_available():
+            _RERANKING_STRATEGY = strategy
+        _RERANKING_LOAD_ATTEMPTED = True
+        return _RERANKING_STRATEGY
+
+
+def preload_reranking_strategy() -> tuple[bool, bool]:
+    enabled = _get_bool_setting("USE_RERANKING", False)
+    if not enabled:
+        return False, False
+
+    strategy = get_reranking_strategy()
+    return True, strategy is not None

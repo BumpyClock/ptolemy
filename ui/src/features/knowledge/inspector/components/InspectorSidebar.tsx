@@ -56,7 +56,13 @@ export const InspectorSidebar: React.FC<InspectorSidebarProps> = ({
       return doc.section || doc.metadata?.section || preview;
     }
     const code = item as CodeExample;
-    // Summary is most descriptive, then language
+    const isSummaryPending =
+      code.metadata?.summary_pending ||
+      code.metadata?.summary_status === "pending" ||
+      code.summary === "Summary pending";
+    if (isSummaryPending) {
+      return "Summarizing code example...";
+    }
     return code.summary || (code.language ? `${code.language} code snippet` : "Code snippet");
   };
 
@@ -123,16 +129,24 @@ export const InspectorSidebar: React.FC<InspectorSidebarProps> = ({
 
                   {/* Content - Can shrink with proper overflow */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 min-w-0">
-                      <span className="text-sm font-medium text-white/90 truncate flex-1" title={getItemTitle(item)}>
-                        {getItemTitle(item)}
+                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                    <span className="text-sm font-medium text-white/90 truncate flex-1" title={getItemTitle(item)}>
+                      {getItemTitle(item)}
+                    </span>
+                    {viewMode === "code" && (item as CodeExample).language && (
+                      <span className="px-1.5 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 text-xs rounded flex-shrink-0">
+                        {(item as CodeExample).language}
                       </span>
-                      {viewMode === "code" && (item as CodeExample).language && (
-                        <span className="px-1.5 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 text-xs rounded flex-shrink-0">
-                          {(item as CodeExample).language}
+                    )}
+                    {viewMode === "code" &&
+                      (((item as CodeExample).metadata?.summary_pending ||
+                        (item as CodeExample).metadata?.summary_status === "pending" ||
+                        (item as CodeExample).summary === "Summary pending") && (
+                        <span className="px-1.5 py-0.5 bg-yellow-500/10 text-yellow-500 text-xs rounded flex-shrink-0">
+                          Summarizing
                         </span>
-                      )}
-                    </div>
+                      ))}
+                  </div>
                     <p className="text-xs text-gray-500 line-clamp-2" title={getItemDescription(item)}>
                       {getItemDescription(item)}
                     </p>

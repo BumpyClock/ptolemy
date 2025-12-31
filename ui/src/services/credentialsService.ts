@@ -27,6 +27,7 @@ export interface RagSettings {
   // Crawling Performance Settings
   CRAWL_BATCH_SIZE?: number;
   CRAWL_MAX_CONCURRENT?: number;
+  CONCURRENT_CRAWL_LIMIT?: number;
   CRAWL_WAIT_STRATEGY?: string;
   CRAWL_PAGE_TIMEOUT?: number;
   CRAWL_DELAY_BEFORE_HTML?: number;
@@ -55,6 +56,7 @@ export interface CodeExtractionSettings {
   CODE_EXTRACTION_MAX_WORKERS: number;
   CONTEXT_WINDOW_SIZE: number;
   ENABLE_CODE_SUMMARIES: boolean;
+  DEFER_CODE_SUMMARIES: boolean;
 }
 
 export interface OllamaInstance {
@@ -206,6 +208,7 @@ class CredentialsService {
       // Crawling Performance Settings defaults
       CRAWL_BATCH_SIZE: 50,
       CRAWL_MAX_CONCURRENT: 10,
+      CONCURRENT_CRAWL_LIMIT: 3,
       CRAWL_WAIT_STRATEGY: "domcontentloaded",
       CRAWL_PAGE_TIMEOUT: 60000, // Increased from 30s to 60s for documentation sites
       CRAWL_DELAY_BEFORE_HTML: 0.5,
@@ -246,6 +249,7 @@ class CredentialsService {
             "CONTEXTUAL_EMBEDDINGS_MAX_WORKERS",
             "CRAWL_BATCH_SIZE",
             "CRAWL_MAX_CONCURRENT",
+            "CONCURRENT_CRAWL_LIMIT",
             "CRAWL_PAGE_TIMEOUT",
             "DOCUMENT_STORAGE_BATCH_SIZE",
             "EMBEDDING_BATCH_SIZE",
@@ -383,6 +387,7 @@ class CredentialsService {
       CODE_EXTRACTION_MAX_WORKERS: 3,
       CONTEXT_WINDOW_SIZE: 1000,
       ENABLE_CODE_SUMMARIES: true,
+      DEFER_CODE_SUMMARIES: false,
     };
 
     // Map credentials to settings

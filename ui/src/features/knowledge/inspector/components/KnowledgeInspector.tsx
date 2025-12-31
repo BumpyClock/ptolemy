@@ -81,14 +81,16 @@ export const KnowledgeInspector: React.FC<KnowledgeInspectorProps> = ({
         type: "code",
         id: String(firstCode.id || ""),
         content: firstCode.content || firstCode.code || "",
-        metadata: {
-          language: firstCode.language,
-          file_path: firstCode.file_path,
-          summary: firstCode.summary,
-          relevance_score: firstCode.metadata?.relevance_score,
-          title: firstCode.title || firstCode.example_name,
-        },
-      });
+          metadata: {
+            language: firstCode.language,
+            file_path: firstCode.file_path,
+            summary: firstCode.summary,
+            summary_status: firstCode.metadata?.summary_status,
+            summary_pending: firstCode.metadata?.summary_pending,
+            relevance_score: firstCode.metadata?.relevance_score,
+            title: firstCode.title || firstCode.example_name,
+          },
+        });
     }
   }, [viewMode, currentItems, selectedItem]);
 
@@ -128,6 +130,8 @@ export const KnowledgeInspector: React.FC<KnowledgeInspectorProps> = ({
             language: code.language,
             file_path: code.file_path,
             summary: code.summary,
+            summary_status: code.metadata?.summary_status,
+            summary_pending: code.metadata?.summary_pending,
             relevance_score: code.metadata?.relevance_score,
             title: code.title || code.example_name,
           },
