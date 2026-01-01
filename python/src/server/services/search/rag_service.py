@@ -12,13 +12,17 @@ It combines multiple RAG strategies in a pipeline fashion:
 Multiple strategies can be enabled simultaneously and work together.
 """
 
+import hashlib
+import json
 import os
 import re
+import time
 from typing import Any
 
 from ...config.logfire_config import get_logger, safe_span
 from ...utils import get_supabase_client
 from ..embeddings.embedding_service import create_embedding
+from ..llm_provider_service import extract_message_text, get_llm_client, prepare_chat_completion_params
 from .agentic_rag_strategy import AgenticRAGStrategy
 
 # Import all strategies
@@ -27,6 +31,10 @@ from .hybrid_search_strategy import HybridSearchStrategy
 from .reranking_strategy import get_reranking_strategy
 
 logger = get_logger(__name__)
+
+_ROUTER_CACHE_TTL_SECONDS = 900
+_ROUTER_CACHE_MAX_ENTRIES = 500
+_ROUTER_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 class RAGService:
@@ -303,6 +311,260 @@ class RAGService:
             return None
         return top_id
 
+    def _router_cache_key(self, query: str, model_choice: str) -> str:
+        cache_seed = f"{model_choice}|{query}"
+        return hashlib.sha256(cache_seed.encode("utf-8")).hexdigest()
+
+    def _get_router_cache(self, cache_key: str) -> dict[str, Any] | None:
+        cached = _ROUTER_CACHE.get(cache_key)
+        if not cached:
+            return None
+        timestamp, payload = cached
+        if time.time() - timestamp > _ROUTER_CACHE_TTL_SECONDS:
+            _ROUTER_CACHE.pop(cache_key, None)
+            return None
+        return payload
+
+    def _set_router_cache(self, cache_key: str, payload: dict[str, Any]) -> None:
+        if len(_ROUTER_CACHE) >= _ROUTER_CACHE_MAX_ENTRIES:
+            _ROUTER_CACHE.clear()
+        _ROUTER_CACHE[cache_key] = (time.time(), payload)
+
+    def _normalize_router_list(self, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            items = [value]
+        elif isinstance(value, list):
+            items = value
+        else:
+            items = [str(value)]
+        cleaned = []
+        seen = set()
+        for item in items:
+            text = str(item).strip()
+            if not text:
+                continue
+            lower = text.lower()
+            if lower in seen:
+                continue
+            seen.add(lower)
+            cleaned.append(text)
+            if len(cleaned) >= 6:
+                break
+        return cleaned
+
+    def _normalize_router_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+        intent = str(payload.get("intent") or "concept").strip().lower()
+        provider = str(payload.get("provider") or "none").strip().lower()
+        framework = str(payload.get("framework") or "none").strip().lower()
+        confidence = payload.get("confidence")
+        try:
+            confidence_value = float(confidence)
+        except (TypeError, ValueError):
+            confidence_value = 0.0
+        confidence_value = max(0.0, min(confidence_value, 1.0))
+        return {
+            "intent": intent or "concept",
+            "provider": provider or "none",
+            "framework": framework or "none",
+            "must_terms": self._normalize_router_list(payload.get("must_terms")),
+            "avoid_terms": self._normalize_router_list(payload.get("avoid_terms")),
+            "confidence": confidence_value,
+        }
+
+    def _parse_router_payload(self, text: str) -> dict[str, Any] | None:
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+            return self._normalize_router_payload(parsed)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if not match:
+                return None
+            try:
+                parsed = json.loads(match.group(0))
+                return self._normalize_router_payload(parsed)
+            except json.JSONDecodeError:
+                return None
+
+    def _query_contains_any(self, query: str, terms: list[str]) -> bool:
+        query_lower = query.lower()
+        return any(term.lower() in query_lower for term in terms if term)
+
+    def _get_intent_terms(self, intent: str, query: str) -> list[str]:
+        intent_terms: dict[str, list[str]] = {
+            "api_reference": ["api", "reference"],
+            "guide": ["guide", "tutorial"],
+            "example": ["example", "snippet"],
+            "troubleshooting": ["error", "exception", "failure"],
+            "concept": ["overview", "concept"],
+            "tool_schema": ["tool schema", "tool call", "function call"],
+            "streaming": ["streaming", "stream", "response", "event"],
+            "pagination": ["pagination", "cursor", "page token"],
+            "error_payload": ["error payload", "error response", "error object"],
+        }
+
+        terms = intent_terms.get(intent, [])
+        if not terms:
+            return []
+
+        if intent == "tool_schema" and self._query_contains_any(query, ["stream", "streaming"]):
+            terms.extend(["stream", "response"])
+        if intent == "streaming" and self._query_contains_any(query, ["tool", "function"]):
+            terms.extend(["tool call", "function call"])
+
+        return terms
+
+    def _is_issue_like(self, url: str | None, title: str | None) -> bool:
+        url_text = (url or "").lower()
+        title_text = (title or "").lower()
+        issue_markers = ["/issues/", "/pull/", "/pulls/", "/discussions/", "github.com"]
+        if any(marker in url_text for marker in issue_markers):
+            if any(token in url_text for token in ["/issues/", "/pull/", "/pulls/", "/discussions/"]):
+                return True
+        return any(token in title_text for token in ["issue", "bug", "incident"])
+
+    def _should_avoid_issue_pages(self, query: str, routing: dict[str, Any]) -> bool:
+        if routing.get("intent") == "troubleshooting":
+            return False
+        lowered = query.lower()
+        if any(token in lowered for token in ["issue", "bug", "incident", "stack trace", "stacktrace"]):
+            return False
+        return True
+
+    def _apply_routing_constraints(
+        self,
+        results: list[dict[str, Any]],
+        routing: dict[str, Any] | None,
+        query: str,
+        match_count: int,
+    ) -> list[dict[str, Any]]:
+        if not routing or routing.get("confidence", 0.0) < 0.45:
+            return results
+
+        constrained = results
+
+        avoid_terms = routing.get("avoid_terms") or []
+        if avoid_terms:
+            filtered = []
+            for entry in constrained:
+                metadata = entry.get("metadata") or {}
+                haystack = " ".join(
+                    [
+                        str(entry.get("content") or ""),
+                        str(metadata.get("title") or ""),
+                        str(metadata.get("section_title") or ""),
+                        str(metadata.get("url") or ""),
+                    ]
+                ).lower()
+                if any(term.lower() in haystack for term in avoid_terms if term):
+                    continue
+                filtered.append(entry)
+            if filtered:
+                constrained = filtered
+
+        if self._should_avoid_issue_pages(query, routing):
+            non_issue = []
+            issue = []
+            for entry in constrained:
+                metadata = entry.get("metadata") or {}
+                url = metadata.get("url") or entry.get("url")
+                title = metadata.get("title") or metadata.get("section_title") or entry.get("title")
+                if self._is_issue_like(url, title):
+                    issue.append(entry)
+                else:
+                    non_issue.append(entry)
+            if len(non_issue) >= match_count:
+                constrained = non_issue
+            else:
+                constrained = non_issue + issue
+
+        return constrained
+
+    def _build_router_query(self, query: str, routing: dict[str, Any] | None) -> str:
+        if not routing:
+            return query
+        confidence = routing.get("confidence", 0.0)
+        if confidence < 0.45:
+            return query
+        additions = []
+        provider = routing.get("provider")
+        framework = routing.get("framework")
+        intent = routing.get("intent") or "concept"
+        if provider and provider != "none":
+            additions.append(provider)
+        if framework and framework != "none":
+            additions.append(framework)
+        additions.extend(self._get_intent_terms(intent, query))
+        additions.extend(routing.get("must_terms") or [])
+        if not additions:
+            return query
+        addition_text = " ".join([text for text in additions if text.strip()])
+        if not addition_text:
+            return query
+        if addition_text.lower() in query.lower():
+            return query
+        combined = f"{query} {addition_text}".strip()
+        return combined[:400] if len(combined) > 400 else combined
+
+    async def _route_query_with_llm(self, query: str) -> dict[str, Any] | None:
+        cleaned_query = query.strip()
+        if not cleaned_query:
+            return None
+
+        model_choice = self.get_setting("ROUTER_MODEL_CHOICE", "").strip()
+        if not model_choice:
+            model_choice = self.get_setting("MODEL_CHOICE", "gpt-4.1-nano").strip()
+        cache_key = self._router_cache_key(cleaned_query, model_choice)
+        cached = self._get_router_cache(cache_key)
+        if cached:
+            return cached
+
+        system_prompt = (
+            "You are a routing assistant for documentation search "
+            "Return only a JSON object with the required keys"
+        )
+        user_prompt = (
+            "Query:\n"
+            f"{cleaned_query}\n\n"
+            "Return JSON with keys:\n"
+            "- intent: api_reference|guide|example|troubleshooting|concept|tool_schema|streaming|pagination|error_payload\n"
+            "- provider: openai|anthropic|google|ollama|openrouter|grok|none\n"
+            "- framework: nextjs|react|browser|node|python|none\n"
+            "- must_terms: array of up to 6 strings\n"
+            "- avoid_terms: array of up to 6 strings\n"
+            "- confidence: number between 0 and 1\n"
+            "No extra keys and no prose"
+        )
+
+        try:
+            async with get_llm_client() as client:
+                params = {
+                    "model": model_choice,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 220,
+                }
+                final_params = prepare_chat_completion_params(model_choice, params)
+                response = await client.chat.completions.create(**final_params)
+            choice = response.choices[0] if response and response.choices else None
+            content_text, _, _ = extract_message_text(choice)
+            parsed = self._parse_router_payload(content_text)
+            if not parsed:
+                return None
+            self._set_router_cache(cache_key, parsed)
+            return parsed
+        except Exception as e:
+            logger.warning(f"LLM router failed: {e}")
+            return None
+
     def _needs_adjacent_chunk(self, content: str) -> tuple[bool, bool]:
         fence_count = content.count("```")
         if fence_count % 2 == 0:
@@ -397,11 +659,49 @@ class RAGService:
             try:
                 logger.info(f"RAG query started: {query[:100]}{'...' if len(query) > 100 else ''}")
 
+                use_llm_router = self.get_bool_setting("USE_LLM_ROUTER", False)
+                routing_payload = None
+                search_query = query
+                if use_llm_router:
+                    routing_payload = await self._route_query_with_llm(query)
+                    search_query = self._build_router_query(query, routing_payload)
+                    if routing_payload:
+                        logger.info(
+                            "Code routing decision",
+                            extra={
+                                "intent": routing_payload.get("intent"),
+                                "provider": routing_payload.get("provider"),
+                                "framework": routing_payload.get("framework"),
+                                "confidence": routing_payload.get("confidence"),
+                                "must_terms": routing_payload.get("must_terms"),
+                                "avoid_terms": routing_payload.get("avoid_terms"),
+                                "search_query": search_query,
+                            },
+                        )
+                    if routing_payload:
+                        logger.info(
+                            "RAG routing decision",
+                            extra={
+                                "intent": routing_payload.get("intent"),
+                                "provider": routing_payload.get("provider"),
+                                "framework": routing_payload.get("framework"),
+                                "confidence": routing_payload.get("confidence"),
+                                "must_terms": routing_payload.get("must_terms"),
+                                "avoid_terms": routing_payload.get("avoid_terms"),
+                                "search_query": search_query,
+                            },
+                        )
+
                 inferred_source = None
                 if not source:
-                    inferred_source = self._infer_source_id(query)
+                    inferred_source = self._infer_source_id(search_query)
                     if inferred_source:
                         source = inferred_source
+                if routing_payload:
+                    logger.info(
+                        "RAG routing source selection",
+                        extra={"source": source, "source_inferred": bool(inferred_source)},
+                    )
 
                 # Build filter metadata
                 filter_metadata = {"source": source} if source else None
@@ -421,7 +721,7 @@ class RAGService:
 
                 # Step 1 & 2: Get results (with hybrid search if enabled)
                 results = await self.search_documents(
-                    query=query,
+                    query=search_query,
                     match_count=search_match_count,
                     filter_metadata=filter_metadata,
                     use_hybrid_search=use_hybrid_search,
@@ -429,12 +729,24 @@ class RAGService:
 
                 span.set_attribute("raw_results_count", len(results))
                 span.set_attribute("hybrid_search_enabled", use_hybrid_search)
+                span.set_attribute("router_enabled", use_llm_router)
+                span.set_attribute("router_used", routing_payload is not None)
+                if routing_payload:
+                    span.set_attribute("routing_intent", routing_payload.get("intent"))
+                    span.set_attribute("routing_provider", routing_payload.get("provider"))
+                    span.set_attribute("routing_framework", routing_payload.get("framework"))
 
                 # Format results for processing
                 formatted_results = []
                 for i, result in enumerate(results):
                     try:
                         metadata = dict(result.get("metadata") or {})
+                        if result.get("source_id") and "source_id" not in metadata:
+                            metadata["source_id"] = result.get("source_id")
+                        if result.get("page_id") and "page_id" not in metadata:
+                            metadata["page_id"] = result.get("page_id")
+                        if result.get("url") and "url" not in metadata:
+                            metadata["url"] = result.get("url")
                         if result.get("chunk_number") is not None and "chunk_number" not in metadata:
                             metadata["chunk_number"] = result.get("chunk_number")
                         formatted_result = {
@@ -448,16 +760,33 @@ class RAGService:
                         logger.warning(f"Failed to format result {i}: {format_error}")
                         continue
 
+                formatted_results = self._apply_routing_constraints(
+                    formatted_results,
+                    routing_payload,
+                    search_query,
+                    match_count,
+                )
+
                 # Step 3: Apply reranking if we have a strategy or if enabled
                 reranking_applied = False
                 if self.reranking_strategy and formatted_results:
                     try:
                         # Pass top_k to limit results to the originally requested count
                         formatted_results = await self.reranking_strategy.rerank_results(
-                            query, formatted_results, content_key="content", top_k=match_count
+                            search_query, formatted_results, content_key="content", top_k=match_count
                         )
                         reranking_applied = True
                         logger.debug(f"Reranking applied: {search_match_count} candidates -> {len(formatted_results)} final results")
+                        top_urls = [
+                            (entry.get("metadata") or {}).get("url") or entry.get("url")
+                            for entry in formatted_results[:3]
+                            if (entry.get("metadata") or {}).get("url") or entry.get("url")
+                        ]
+                        if top_urls:
+                            logger.info(
+                                "Reranking top results",
+                                extra={"top_urls": top_urls, "count": len(formatted_results)},
+                            )
                     except Exception as e:
                         logger.warning(f"Reranking failed: {e}")
                         reranking_applied = False
@@ -489,6 +818,7 @@ class RAGService:
                 response_data = {
                     "results": formatted_results,
                     "query": query,
+                    "search_query": search_query,
                     "source": source,
                     "source_inferred": bool(inferred_source),
                     "source_inferred_id": inferred_source,
@@ -555,6 +885,13 @@ class RAGService:
                         "query": query,
                     }
 
+                use_llm_router = self.get_bool_setting("USE_LLM_ROUTER", False)
+                routing_payload = None
+                search_query = query
+                if use_llm_router:
+                    routing_payload = await self._route_query_with_llm(query)
+                    search_query = self._build_router_query(query, routing_payload)
+
                 # Check which strategies are enabled
                 use_hybrid_search = self.get_bool_setting("USE_HYBRID_SEARCH", False)
                 use_reranking = self.get_bool_setting("USE_RERANKING", False)
@@ -566,32 +903,52 @@ class RAGService:
                     logger.debug(f"Reranking enabled for code search - fetching {search_match_count} candidates")
 
                 # Prepare filter
-                filter_metadata = {"source": source_id} if source_id and source_id.strip() else None
+                resolved_source_id = source_id
+                if not resolved_source_id:
+                    resolved_source_id = self._infer_source_id(search_query)
+                filter_metadata = (
+                    {"source": resolved_source_id} if resolved_source_id and resolved_source_id.strip() else None
+                )
+                if routing_payload:
+                    logger.info(
+                        "Code routing source selection",
+                        extra={"source": resolved_source_id, "source_inferred": resolved_source_id is not None},
+                    )
 
                 if use_hybrid_search:
                     # Use hybrid search for code examples
                     results = await self.hybrid_strategy.search_code_examples_hybrid(
-                        query=query,
+                        query=search_query,
                         match_count=search_match_count,
                         filter_metadata=filter_metadata,
-                        source_id=source_id,
+                        source_id=resolved_source_id,
                     )
                 else:
                     # Use standard agentic search
                     results = await self.agentic_strategy.search_code_examples(
-                        query=query,
+                        query=search_query,
                         match_count=search_match_count,
                         filter_metadata=filter_metadata,
-                        source_id=source_id,
+                        source_id=resolved_source_id,
                     )
 
                 # Apply reranking if we have a strategy
                 if self.reranking_strategy and results:
                     try:
                         results = await self.reranking_strategy.rerank_results(
-                            query, results, content_key="content", top_k=match_count
+                            search_query, results, content_key="content", top_k=match_count
                         )
                         logger.debug(f"Code reranking applied: {search_match_count} candidates -> {len(results)} final results")
+                        top_urls = [
+                            (entry.get("metadata") or {}).get("url") or entry.get("url")
+                            for entry in results[:3]
+                            if (entry.get("metadata") or {}).get("url") or entry.get("url")
+                        ]
+                        if top_urls:
+                            logger.info(
+                                "Code reranking top results",
+                                extra={"top_urls": top_urls, "count": len(results)},
+                            )
                     except Exception as e:
                         logger.warning(f"Code reranking failed: {e}")
                         # If reranking fails but we fetched extra results, trim to requested count
@@ -616,7 +973,8 @@ class RAGService:
 
                 response_data = {
                     "query": query,
-                    "source_filter": source_id,
+                    "search_query": search_query,
+                    "source_filter": resolved_source_id,
                     "search_mode": "hybrid" if use_hybrid_search else "vector",
                     "reranking_applied": self.reranking_strategy is not None,
                     "results": formatted_results,
@@ -626,6 +984,12 @@ class RAGService:
                 span.set_attribute("results_found", len(formatted_results))
                 span.set_attribute("hybrid_used", use_hybrid_search)
                 span.set_attribute("reranking_used", use_reranking)
+                span.set_attribute("router_enabled", use_llm_router)
+                span.set_attribute("router_used", routing_payload is not None)
+                if routing_payload:
+                    span.set_attribute("routing_intent", routing_payload.get("intent"))
+                    span.set_attribute("routing_provider", routing_payload.get("provider"))
+                    span.set_attribute("routing_framework", routing_payload.get("framework"))
 
                 return True, response_data
 

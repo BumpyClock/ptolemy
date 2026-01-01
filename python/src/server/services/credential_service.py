@@ -591,6 +591,7 @@ async def initialize_credentials() -> None:
     # - USE_HYBRID_SEARCH
     # - USE_AGENTIC_RAG
     # - USE_RERANKING
+    # - USE_LLM_ROUTER
 
     # Code extraction settings (loaded on demand, not set as env vars):
     # - MIN_CODE_BLOCK_LENGTH

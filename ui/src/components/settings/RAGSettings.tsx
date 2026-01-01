@@ -146,6 +146,7 @@ interface RAGSettingsProps {
     USE_HYBRID_SEARCH: boolean;
     USE_AGENTIC_RAG: boolean;
     USE_RERANKING: boolean;
+    USE_LLM_ROUTER: boolean;
     LLM_PROVIDER?: string;
     LLM_BASE_URL?: string;
     LLM_INSTANCE_NAME?: string;
@@ -1916,7 +1917,7 @@ const manualTestConnection = async (
           </div>
         </div>
         
-        {/* Fourth row: Use Reranking */}
+        {/* Fourth row: Use Reranking and LLM Routing */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <CustomCheckbox 
@@ -1930,7 +1931,18 @@ const manualTestConnection = async (
               description="Applies cross-encoder reranking to improve search result relevance" 
             />
           </div>
-          <div>{/* Empty column */}</div>
+          <div>
+            <CustomCheckbox 
+              id="llmRouter" 
+              checked={ragSettings.USE_LLM_ROUTER} 
+              onChange={e => setRagSettings({
+                ...ragSettings,
+                USE_LLM_ROUTER: e.target.checked
+              })} 
+              label="Use LLM Routing" 
+              description="Uses a small LLM call to route queries to likely sources" 
+            />
+          </div>
         </div>
 
         {/* Crawling Performance Settings */}

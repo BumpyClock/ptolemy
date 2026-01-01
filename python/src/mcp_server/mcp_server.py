@@ -61,6 +61,55 @@ from src.server.services.mcp_service_client import get_mcp_service_client
 # Import session management
 from src.server.services.mcp_session_manager import get_session_manager
 
+# Tool schema pruning to reduce token usage for specific tools.
+def _strip_schema_keys(schema: dict[str, Any], keys: set[str]) -> dict[str, Any]:
+    if not isinstance(schema, dict):
+        return schema
+    cleaned: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in keys:
+            continue
+        if isinstance(value, dict):
+            cleaned[key] = _strip_schema_keys(value, keys)
+        elif isinstance(value, list):
+            cleaned[key] = [
+                _strip_schema_keys(item, keys) if isinstance(item, dict) else item
+                for item in value
+            ]
+        else:
+            cleaned[key] = value
+    return cleaned
+
+
+class PtolemyMCP(FastMCP):
+    async def list_tools(self):
+        tools = await super().list_tools()
+        for tool in tools:
+            if tool.name not in {"docs_answer", "docs_fetch"}:
+                continue
+            if tool.name == "docs_answer":
+                tool.description = (
+                    "Search docs/code. Use query; optional source_id filter; kind: doc|code_example."
+                )
+            elif tool.name == "docs_fetch":
+                tool.description = (
+                    "Fetch docs data. Set kind; source_id required for pages/code_examples/chunks; "
+                    "use page_id or url for page."
+                )
+            tool.inputSchema = _strip_schema_keys(
+                tool.inputSchema,
+                {"title", "default", "minimum", "maximum"},
+            )
+            properties = tool.inputSchema.get("properties") if isinstance(tool.inputSchema, dict) else None
+            if isinstance(properties, dict):
+                for key, prop in properties.items():
+                    if key == "source_id":
+                        continue
+                    if isinstance(prop, dict):
+                        prop.pop("description", None)
+            tool.outputSchema = None
+        return tools
+
 # Global initialization lock and flag
 _initialization_lock = threading.Lock()
 _initialization_complete = False
@@ -218,7 +267,7 @@ try:
     logger.info("   Server Name: ptolemy-mcp-server")
     logger.info("   Description: MCP server using HTTP calls")
 
-    mcp = FastMCP(
+    mcp = PtolemyMCP(
         "ptolemy-mcp-server",
         description="MCP server for Ptolemy - uses HTTP calls to other services",
         instructions=MCP_INSTRUCTIONS,

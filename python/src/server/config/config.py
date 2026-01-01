@@ -36,6 +36,7 @@ class RAGStrategyConfig:
     use_hybrid_search: bool = True
     use_agentic_rag: bool = True
     use_reranking: bool = True
+    use_llm_router: bool = False
 
 
 @dataclass
@@ -261,6 +262,7 @@ def get_rag_strategy_config() -> RAGStrategyConfig:
         use_hybrid_search=str_to_bool(os.getenv("USE_HYBRID_SEARCH")),
         use_agentic_rag=str_to_bool(os.getenv("USE_AGENTIC_RAG")),
         use_reranking=str_to_bool(os.getenv("USE_RERANKING")),
+        use_llm_router=str_to_bool(os.getenv("USE_LLM_ROUTER")),
     )
 
 

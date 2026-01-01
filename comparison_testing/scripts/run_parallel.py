@@ -38,6 +38,7 @@ class RunnerConfig:
     scenario_dir: Path
     template_path: Path
     review_template_path: Path
+    final_review_template_path: Path
     run_base_dir: Path
     claude_cmd: str
     claude_run_args: list[str]
@@ -68,16 +69,31 @@ class ProcessTracker:
     def discard(self, proc: asyncio.subprocess.Process) -> None:
         self._procs.discard(proc)
 
+    def kill_all_immediate(self) -> None:
+        """Synchronous immediate kill for signal handlers."""
+        for proc in list(self._procs):
+            if proc.returncode is None:
+                try:
+                    proc.kill()
+                except (ProcessLookupError, OSError):
+                    pass
+
     async def terminate_all(self) -> None:
         if not self._procs:
             return
         for proc in list(self._procs):
             if proc.returncode is None:
-                proc.terminate()
-        await asyncio.sleep(0.2)
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+        await asyncio.sleep(0.1)
         for proc in list(self._procs):
             if proc.returncode is None:
-                proc.kill()
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -110,6 +126,7 @@ def build_config(args: argparse.Namespace, comparison_dir: Path) -> RunnerConfig
 
     template_path = comparison_dir / "templates" / f"{args.runner}_prompt_template.md"
     review_template_path = comparison_dir / "review_prompt.md"
+    final_review_template_path = comparison_dir / "final_review_prompt.md"
 
     run_base_dir = comparison_dir / "test_runs" / args.runner / datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -120,17 +137,18 @@ def build_config(args: argparse.Namespace, comparison_dir: Path) -> RunnerConfig
         scenario_dir=Path(scenario_dir),
         template_path=template_path,
         review_template_path=review_template_path,
+        final_review_template_path=final_review_template_path,
         run_base_dir=run_base_dir,
         claude_cmd=os.getenv("CLAUDE_CMD", "claude"),
         claude_run_args=parse_args_list(os.getenv("CLAUDE_RUN_ARGS", "")),
         claude_review_args=parse_args_list(os.getenv("CLAUDE_REVIEW_ARGS", "")),
         claude_trial_model=os.getenv("CLAUDE_TRIAL_MODEL", "claude-haiku-4-5"),
-        claude_synthesis_model=os.getenv("CLAUDE_SYNTHESIS_MODEL", "claude-sonnet-4-5"),
-        codex_model=os.getenv("CODEX_MODEL", ""),
+        claude_synthesis_model=os.getenv("CLAUDE_SYNTHESIS_MODEL", "claude-haiku-4-5"),
+        codex_model=os.getenv("CODEX_MODEL", "gpt-5.1-codex-mini"),
         codex_run_args=parse_args_list(os.getenv("CODEX_RUN_ARGS", "")),
         codex_review_args=parse_args_list(os.getenv("CODEX_REVIEW_ARGS", "")),
         codex_run_thinking=os.getenv("CODEX_RUN_THINKING", "low"),
-        codex_review_thinking=os.getenv("CODEX_REVIEW_THINKING", "high"),
+        codex_review_thinking=os.getenv("CODEX_REVIEW_THINKING", "medium"),
     )
 
 
@@ -154,10 +172,44 @@ def build_prompt_from_template(template: str, scenario: str) -> str:
 
 
 def build_review_prompt(template: str, agents_dir: Path, run_count: int, runner_name: str) -> str:
+    run_files = sorted(agents_dir.glob("run_*.md"))
+    concatenated_runs: list[str] = []
+    for run_file in run_files:
+        try:
+            content = run_file.read_text()
+            concatenated_runs.append(f"## {run_file.stem}\n\n{content}\n")
+        except Exception:
+            concatenated_runs.append(f"## {run_file.stem}\n\n[Error reading file]\n")
+    
+    runs_content = "\n---\n\n".join(concatenated_runs) if concatenated_runs else "[No run files found]"
+    
     return (
         template.replace("{{AGENTS_DIR}}", str(agents_dir))
         .replace("{{RUN_COUNT}}", str(run_count))
         .replace("{{RUNNER_NAME}}", runner_name)
+        .replace("{{RUNS_CONTENT}}", runs_content)
+    )
+
+
+def build_final_review_prompt(template: str, scenarios: list[Scenario], runner_name: str) -> str:
+    concatenated_consolidated: list[str] = []
+    for scenario in scenarios:
+        consolidated_path = scenario.run_dir / "consolidated.md"
+        try:
+            if consolidated_path.exists():
+                content = consolidated_path.read_text()
+                concatenated_consolidated.append(f"## {scenario.name}\n\n{content}\n")
+            else:
+                concatenated_consolidated.append(f"## {scenario.name}\n\n[Consolidated report not found]\n")
+        except Exception:
+            concatenated_consolidated.append(f"## {scenario.name}\n\n[Error reading consolidated report]\n")
+    
+    consolidated_content = "\n---\n\n".join(concatenated_consolidated) if concatenated_consolidated else "[No consolidated reports found]"
+    
+    return (
+        template.replace("{{SCENARIO_COUNT}}", str(len(scenarios)))
+        .replace("{{RUNNER_NAME}}", runner_name)
+        .replace("{{CONSOLIDATED_CONTENT}}", consolidated_content)
     )
 
 
@@ -230,7 +282,7 @@ async def run_trial(
 
     run_id_str = f"{run_id:02d}"
     trial_prompt_path = agents_dir / f"prompt_{run_id_str}.txt"
-    out_path = agents_dir / f"run_{run_id_str}.txt"
+    out_path = agents_dir / f"run_{run_id_str}.md"
     log_path = agents_dir / f"run_{run_id_str}.log"
     trial_prompt_text = prompt_text.replace("[N]", str(run_id))
     trial_prompt_path.write_text(trial_prompt_text)
@@ -247,8 +299,8 @@ async def run_trial(
         "-",
         "-C",
         str(run_dir),
-        "--config",
-        f"thinking={config.codex_run_thinking}",
+        "-c",
+        f"model_reasoning_effort={config.codex_run_thinking}",
         "--output-last-message",
         str(out_path),
     ]
@@ -279,8 +331,8 @@ async def run_consolidation(
         "-",
         "-C",
         str(run_dir),
-        "--config",
-        f"thinking={config.codex_review_thinking}",
+        "-c",
+        f"model_reasoning_effort={config.codex_review_thinking}",
         "--output-last-message",
         str(out_path),
     ]
@@ -356,6 +408,7 @@ async def run_with_concurrency(
 
     def handle_signal() -> None:
         stop_event.set()
+        tracker.kill_all_immediate()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
@@ -365,7 +418,7 @@ async def run_with_concurrency(
 
     max_scenarios = config.max_scenarios
     scenario_list = list(scenarios)
-    total_steps = len(scenario_list) * (config.runs_per_scenario + 1)
+    total_steps = len(scenario_list) * (config.runs_per_scenario + 1) + 1
 
     progress = Progress(
         SpinnerColumn(),
@@ -397,23 +450,66 @@ async def run_with_concurrency(
                     await tracker.terminate_all()
                     return
                 tasks = list(pending)
+        else:
+            sem = asyncio.Semaphore(max_scenarios)
+
+            async def run_with_sem(scenario: Scenario) -> None:
+                async with sem:
+                    await scenario_runner(scenario)
+
+            tasks = [asyncio.create_task(run_with_sem(s)) for s in scenario_list]
+            while tasks:
+                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                if stop_event.is_set():
+                    for task in pending:
+                        task.cancel()
+                    await tracker.terminate_all()
+                    return
+                tasks = list(pending)
+
+        if stop_event.is_set():
+            await tracker.terminate_all()
             return
 
-        sem = asyncio.Semaphore(max_scenarios)
-
-        async def run_with_sem(scenario: Scenario) -> None:
-            async with sem:
-                await scenario_runner(scenario)
-
-        tasks = [asyncio.create_task(run_with_sem(s)) for s in scenario_list]
-        while tasks:
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            if stop_event.is_set():
-                for task in pending:
-                    task.cancel()
-                await tracker.terminate_all()
-                return
-            tasks = list(pending)
+        final_task = progress.add_task("final cross-scenario analysis", total=1)
+        progress.update(final_task, description="final cross-scenario analysis (running)")
+        
+        final_review_template = config.final_review_template_path.read_text()
+        final_review_prompt = build_final_review_prompt(
+            final_review_template,
+            scenario_list,
+            "Claude" if config.runner == "claude" else "Codex",
+        )
+        final_review_prompt_path = config.run_base_dir / "final_review_prompt.txt"
+        final_review_prompt_path.write_text(final_review_prompt)
+        
+        final_out_path = config.run_base_dir / "final_consolidated.md"
+        final_log_path = config.run_base_dir / "final_consolidated.log"
+        
+        if config.runner == "claude":
+            cmd = [config.claude_cmd, "--model", config.claude_synthesis_model, "-p", final_review_prompt]
+            cmd.extend(config.claude_review_args)
+            await run_subprocess(cmd, None, final_out_path, final_log_path, tracker, cwd=config.run_base_dir)
+        else:
+            cmd = [
+                "codex",
+                "exec",
+                "-",
+                "-C",
+                str(config.run_base_dir),
+                "-c",
+                f"model_reasoning_effort={config.codex_review_thinking}",
+                "--output-last-message",
+                str(final_out_path),
+            ]
+            if config.codex_model:
+                cmd.extend(["--model", config.codex_model])
+            cmd.extend(config.codex_review_args)
+            await run_subprocess(cmd, final_review_prompt, final_log_path, final_log_path, tracker, cwd=config.run_base_dir)
+        
+        progress.advance(final_task, 1)
+        progress.advance(overall_task, 1)
+        progress.update(final_task, description="final cross-scenario analysis (done)")
 
 
 async def run_single_prompt(config: RunnerConfig, prompt_text: str, run_dir: Path) -> None:
@@ -423,6 +519,7 @@ async def run_single_prompt(config: RunnerConfig, prompt_text: str, run_dir: Pat
 
     def handle_signal() -> None:
         stop_event.set()
+        tracker.kill_all_immediate()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
@@ -528,6 +625,10 @@ def main(argv: list[str]) -> int:
         prompt_text = normalize_prompt_text(config, args.prompt_file.read_text())
         asyncio.run(run_single_prompt(config, prompt_text, run_dir))
         return 0
+
+    if not config.final_review_template_path.exists():
+        console.print(f"[red]Final review prompt template not found: {config.final_review_template_path}[/red]")
+        return 1
 
     scenarios = load_scenarios(config)
     asyncio.run(run_with_concurrency(config, scenarios))

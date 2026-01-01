@@ -74,7 +74,7 @@ Templates live in `comparison_testing/templates/` and inject `{{TASK_SCENARIO}}`
 
 Runs are written under `comparison_testing/test_runs/<runner>/<timestamp>/<scenario>/` and include:
 
-- `agents/run_XX.txt` and `agents/run_XX.log`
+- `agents/run_XX.md` and `agents/run_XX.log`
 - `review_prompt.txt`
 - `consolidated.md` and `consolidated.log`
 

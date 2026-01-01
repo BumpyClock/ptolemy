@@ -38,6 +38,7 @@ export const SettingsPage = () => {
     USE_HYBRID_SEARCH: true,
     USE_AGENTIC_RAG: true,
     USE_RERANKING: true,
+    USE_LLM_ROUTER: false,
     MODEL_CHOICE: "gpt-4.1-nano",
   });
   const [codeExtractionSettings, setCodeExtractionSettings] =

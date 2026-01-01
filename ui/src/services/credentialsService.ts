@@ -16,6 +16,7 @@ export interface RagSettings {
   USE_HYBRID_SEARCH: boolean;
   USE_AGENTIC_RAG: boolean;
   USE_RERANKING: boolean;
+  USE_LLM_ROUTER: boolean;
   MODEL_CHOICE: string;
   LLM_PROVIDER?: string;
   LLM_BASE_URL?: string;
@@ -195,16 +196,17 @@ class CredentialsService {
       USE_CONTEXTUAL_EMBEDDINGS: false,
       CONTEXTUAL_EMBEDDINGS_MAX_WORKERS: 3,
       USE_HYBRID_SEARCH: true,
-  USE_AGENTIC_RAG: true,
-  USE_RERANKING: true,
-  MODEL_CHOICE: "gpt-4.1-nano",
-  LLM_PROVIDER: "openai",
-  LLM_BASE_URL: "",
-  LLM_INSTANCE_NAME: "",
-  OLLAMA_EMBEDDING_URL: "",
-  OLLAMA_EMBEDDING_INSTANCE_NAME: "",
-  EMBEDDING_PROVIDER: "openai",
-  EMBEDDING_MODEL: "",
+      USE_AGENTIC_RAG: true,
+      USE_RERANKING: true,
+      USE_LLM_ROUTER: false,
+      MODEL_CHOICE: "gpt-4.1-nano",
+      LLM_PROVIDER: "openai",
+      LLM_BASE_URL: "",
+      LLM_INSTANCE_NAME: "",
+      OLLAMA_EMBEDDING_URL: "",
+      OLLAMA_EMBEDDING_INSTANCE_NAME: "",
+      EMBEDDING_PROVIDER: "openai",
+      EMBEDDING_MODEL: "",
       // Crawling Performance Settings defaults
       CRAWL_BATCH_SIZE: 50,
       CRAWL_MAX_CONCURRENT: 10,

@@ -3,11 +3,5 @@
   "tools": {
     "preset": "standard",
     "disable": ["initialSetup"]
-  },
-  "semantic_search": {
-    "enabled": true,
-    "embedder": {
-      "provider": "fastembed"
-    }
   }
 }

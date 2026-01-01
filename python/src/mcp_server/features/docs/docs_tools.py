@@ -63,7 +63,69 @@ def _normalize_kinds(kinds: Any) -> list[str]:
     return list(kinds)
 
 
-def _build_doc_item(result: dict[str, Any]) -> dict[str, Any]:
+def _normalize_str(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _normalize_positive_int(value: int | None) -> int | None:
+    if value is None:
+        return None
+    return value if value > 0 else None
+
+
+async def _hydrate_missing_doc_metadata(
+    results: list[dict[str, Any]],
+    client: httpx.AsyncClient,
+    api_url: str,
+    max_lookups: int = 20,
+) -> list[dict[str, Any]]:
+    cache: dict[str, dict[str, Any] | None] = {}
+    lookups = 0
+
+    for result in results:
+        metadata = result.get("metadata") or {}
+        if metadata.get("source_id") or metadata.get("source"):
+            continue
+
+        page_id = result.get("page_id") or metadata.get("page_id")
+        url = result.get("url") or metadata.get("url")
+        if not page_id and not url:
+            continue
+
+        cache_key = f"id:{page_id}" if page_id else f"url:{url}"
+        if cache_key not in cache:
+            if lookups >= max_lookups:
+                continue
+            lookups += 1
+            try:
+                if page_id:
+                    response = await client.get(urljoin(api_url, f"/api/pages/{page_id}"))
+                else:
+                    response = await client.get(urljoin(api_url, "/api/pages/by-url"), params={"url": url})
+                cache[cache_key] = response.json() if response.status_code == 200 else None
+            except httpx.RequestError:
+                cache[cache_key] = None
+
+        payload = cache.get(cache_key)
+        if not payload:
+            continue
+
+        source_id = payload.get("source_id")
+        if source_id:
+            metadata["source_id"] = source_id
+        if payload.get("url") and not metadata.get("url"):
+            metadata["url"] = payload.get("url")
+        if payload.get("id") and not result.get("page_id"):
+            result["page_id"] = payload.get("id")
+        result["metadata"] = metadata
+
+    return results
+
+
+def _build_doc_item(result: dict[str, Any], return_mode: str) -> dict[str, Any]:
     metadata = result.get("metadata") or {}
     url = result.get("url") or metadata.get("url")
     page_id = result.get("page_id") or metadata.get("page_id")
@@ -81,8 +143,21 @@ def _build_doc_item(result: dict[str, Any]) -> dict[str, Any]:
         result.get("average_similarity"),
         result.get("similarity"),
     )
+    source_id = result.get("source_id") or metadata.get("source_id") or metadata.get("source")
+    if source_id and "source_id" not in metadata:
+        metadata["source_id"] = source_id
+    if page_id and "page_id" not in metadata:
+        metadata["page_id"] = page_id
+    chunk_id = None
+    if return_mode == "chunks":
+        chunk_id = result.get("id") or metadata.get("chunk_id")
+        if chunk_id and "chunk_id" not in metadata:
+            metadata["chunk_id"] = chunk_id
     payload = {
         "id": page_id or result.get("id"),
+        "source_id": source_id,
+        "page_id": page_id,
+        "chunk_id": chunk_id,
         "url": url,
         "title": title,
         "section": section,
@@ -99,6 +174,9 @@ def _build_code_item(result: dict[str, Any]) -> dict[str, Any]:
     summary = result.get("summary")
     if summary:
         metadata = {**metadata, "summary": summary}
+    source_id = result.get("source_id") or metadata.get("source_id") or metadata.get("source")
+    if source_id and "source_id" not in metadata:
+        metadata["source_id"] = source_id
     url = result.get("url") or metadata.get("url")
     title = metadata.get("title") or metadata.get("example_name") or result.get("title")
     section = metadata.get("section")
@@ -106,6 +184,7 @@ def _build_code_item(result: dict[str, Any]) -> dict[str, Any]:
     score = _first_float(result.get("rerank_score"), result.get("similarity"), result.get("score"))
     payload = {
         "id": metadata.get("id"),
+        "source_id": source_id,
         "url": url,
         "title": title,
         "section": section,
@@ -166,10 +245,10 @@ def register_docs_tools(mcp: FastMCP):
     async def docs_answer(
         ctx: Context,
         query: str,
-        kind: Annotated[list[Literal["doc", "code_example"]], Field(description="Kinds of results")] = _DEFAULT_KINDS,
-        source_id: str | None = None,
-        match_count: Annotated[int, Field(ge=1, le=20, description="Max results")] = 5,
-        return_mode: Annotated[Literal["chunks", "pages"], Field(description="Return mode")] = "chunks",
+        kind: Annotated[list[Literal["doc", "code_example"]], Field(description="doc|code_example")] = _DEFAULT_KINDS,
+        source_id: Annotated[str, Field(description="source filter")] = "",
+        match_count: Annotated[int, Field(ge=1, le=20)] = 5,
+        return_mode: Annotated[Literal["chunks", "pages"], Field(description="chunks|pages")] = "chunks",
         citations: bool = True,
         debug: bool = False,
     ) -> str:
@@ -195,7 +274,7 @@ def register_docs_tools(mcp: FastMCP):
 
             api_url = get_api_url()
             timeout = get_default_timeout()
-            source_filter = source_id.strip() if source_id and source_id.strip() else None
+            source_filter = _normalize_str(source_id)
 
             doc_results = []
             code_results = []
@@ -223,6 +302,8 @@ def register_docs_tools(mcp: FastMCP):
                     doc_results = doc_payload.get("results", [])
                     doc_return_mode = doc_payload.get("return_mode", return_mode)
                     reranked = bool(doc_payload.get("reranking_applied", doc_payload.get("reranked", False)))
+                    if doc_results:
+                        doc_results = await _hydrate_missing_doc_metadata(doc_results, client, api_url)
                     if debug_data is not None:
                         debug_data["doc_results"] = len(doc_results)
 
@@ -250,7 +331,7 @@ def register_docs_tools(mcp: FastMCP):
             merged: list[dict[str, Any]] = []
 
             for result in doc_results:
-                item = _build_doc_item(result)
+                item = _build_doc_item(result, doc_return_mode)
                 content_hash = _hash_text(item.get("content"))
                 citation = _build_citation(item, result, "doc", doc_return_mode, content_hash)
                 merged.append(
@@ -352,19 +433,19 @@ def register_docs_tools(mcp: FastMCP):
         ctx: Context,
         kind: Annotated[
             Literal["sources", "pages", "page", "code_examples", "chunks"],
-            Field(description="Fetch mode"),
+            Field(description="sources|pages|page|code_examples|chunks"),
         ],
-        source_id: str | None = None,
-        section: str | None = None,
-        page: Annotated[int, Field(ge=1, description="Page number")] = 1,
-        per_page: Annotated[int | None, Field(ge=1, description="Items per page")] = None,
-        query: str | None = None,
-        tag: str | None = None,
-        page_id: str | None = None,
-        url: str | None = None,
-        domain_filter: str | None = None,
-        offset: Annotated[int | None, Field(ge=0, description="Content slice offset")] = None,
-        limit: Annotated[int | None, Field(ge=1, description="Content slice length")] = None,
+        source_id: Annotated[str, Field(description="required for pages/code_examples/chunks")] = "",
+        section: str = "",
+        page: Annotated[int, Field(ge=1)] = 1,
+        per_page: Annotated[int, Field(ge=0)] = 0,
+        query: str = "",
+        tag: str = "",
+        page_id: Annotated[str, Field(description="page id")] = "",
+        url: Annotated[str, Field(description="page url")] = "",
+        domain_filter: str = "",
+        offset: Annotated[int, Field(ge=0)] = 0,
+        limit: Annotated[int, Field(ge=0)] = 0,
     ) -> str:
         """
         Fetch deterministic documentation data without search.
@@ -373,6 +454,15 @@ def register_docs_tools(mcp: FastMCP):
             api_url = get_api_url()
             timeout = get_default_timeout()
             page_value = max(page, 1)
+            source_value = _normalize_str(source_id)
+            section_value = _normalize_str(section)
+            query_value = _normalize_str(query)
+            tag_value = _normalize_str(tag)
+            page_id_value = _normalize_str(page_id)
+            url_value = _normalize_str(url)
+            domain_filter_value = _normalize_str(domain_filter)
+            slice_offset = _normalize_positive_int(offset)
+            slice_limit = _normalize_positive_int(limit)
 
             default_per_page = {
                 _SOURCE_KIND: 25,
@@ -388,7 +478,7 @@ def register_docs_tools(mcp: FastMCP):
                 per_page_value = min(per_page_value, 100)
             per_page_value = max(per_page_value, 1)
 
-            offset = (page_value - 1) * per_page_value
+            page_offset = (page_value - 1) * per_page_value
 
             async with httpx.AsyncClient(timeout=timeout) as client:
                 if kind == _SOURCE_KIND:
@@ -413,8 +503,8 @@ def register_docs_tools(mcp: FastMCP):
                             }
                         )
                     sources = payload.get("sources", [])
-                    if query:
-                        query_lower = query.lower()
+                    if query_value:
+                        query_lower = query_value.lower()
                         sources = [
                             source
                             for source in sources
@@ -422,11 +512,11 @@ def register_docs_tools(mcp: FastMCP):
                             or query_lower in (source.get("summary") or "").lower()
                             or query_lower in (source.get("source_id") or "").lower()
                         ]
-                    if tag:
+                    if tag_value:
                         sources = [
                             source
                             for source in sources
-                            if tag in (source.get("metadata", {}).get("tags") or [])
+                            if tag_value in (source.get("metadata", {}).get("tags") or [])
                         ]
                     total = len(sources)
                     start = (page_value - 1) * per_page_value
@@ -447,7 +537,7 @@ def register_docs_tools(mcp: FastMCP):
                     )
 
                 if kind == _PAGES_KIND:
-                    if not source_id:
+                    if not source_value:
                         return _compact_json(
                             {
                                 "success": False,
@@ -456,9 +546,9 @@ def register_docs_tools(mcp: FastMCP):
                                 "error": "Missing source_id for pages fetch",
                             }
                         )
-                    params = {"source_id": source_id}
-                    if section:
-                        params["section"] = section
+                    params = {"source_id": source_value}
+                    if section_value:
+                        params["section"] = section_value
                     response = await client.get(urljoin(api_url, "/api/pages"), params=params)
                     if response.status_code != 200:
                         return _compact_json(
@@ -484,14 +574,14 @@ def register_docs_tools(mcp: FastMCP):
                                 "page": page_value,
                                 "per_page": per_page_value,
                                 "has_more": end < total,
-                                "source_id": payload.get("source_id", source_id),
+                                "source_id": payload.get("source_id", source_value),
                             },
                             "error": None,
                         }
                     )
 
                 if kind == _PAGE_KIND:
-                    if bool(page_id) == bool(url):
+                    if bool(page_id_value) == bool(url_value):
                         return _compact_json(
                             {
                                 "success": False,
@@ -500,13 +590,13 @@ def register_docs_tools(mcp: FastMCP):
                                 "error": "Provide exactly one of page_id or url",
                             }
                         )
-                    if page_id:
-                        params = _drop_none({"offset": offset, "limit": limit})
+                    if page_id_value:
+                        params = _drop_none({"offset": slice_offset, "limit": slice_limit})
                         response = await client.get(
-                            urljoin(api_url, f"/api/pages/{page_id}"), params=params
+                            urljoin(api_url, f"/api/pages/{page_id_value}"), params=params
                         )
                     else:
-                        params = _drop_none({"url": url, "offset": offset, "limit": limit})
+                        params = _drop_none({"url": url_value, "offset": slice_offset, "limit": slice_limit})
                         response = await client.get(urljoin(api_url, "/api/pages/by-url"), params=params)
                     if response.status_code != 200:
                         return _compact_json(
@@ -528,7 +618,7 @@ def register_docs_tools(mcp: FastMCP):
                     )
 
                 if kind == _CODE_EXAMPLES_KIND:
-                    if not source_id:
+                    if not source_value:
                         return _compact_json(
                             {
                                 "success": False,
@@ -537,9 +627,9 @@ def register_docs_tools(mcp: FastMCP):
                                 "error": "Missing source_id for code examples fetch",
                             }
                         )
-                    params = {"limit": per_page_value, "offset": offset}
+                    params = {"limit": per_page_value, "offset": page_offset}
                     response = await client.get(
-                        urljoin(api_url, f"/api/knowledge-items/{source_id}/code-examples"), params=params
+                        urljoin(api_url, f"/api/knowledge-items/{source_value}/code-examples"), params=params
                     )
                     if response.status_code != 200:
                         return _compact_json(
@@ -561,15 +651,15 @@ def register_docs_tools(mcp: FastMCP):
                                 "total": total,
                                 "page": page_value,
                                 "per_page": per_page_value,
-                                "has_more": payload.get("has_more", offset + per_page_value < total),
-                                "source_id": payload.get("source_id", source_id),
+                                "has_more": payload.get("has_more", page_offset + per_page_value < total),
+                                "source_id": payload.get("source_id", source_value),
                             },
                             "error": None,
                         }
                     )
 
                 if kind == _CHUNKS_KIND:
-                    if not source_id:
+                    if not source_value:
                         return _compact_json(
                             {
                                 "success": False,
@@ -578,11 +668,11 @@ def register_docs_tools(mcp: FastMCP):
                                 "error": "Missing source_id for chunks fetch",
                             }
                         )
-                    params = {"limit": per_page_value, "offset": offset}
-                    if domain_filter:
-                        params["domain_filter"] = domain_filter
+                    params = {"limit": per_page_value, "offset": page_offset}
+                    if domain_filter_value:
+                        params["domain_filter"] = domain_filter_value
                     response = await client.get(
-                        urljoin(api_url, f"/api/knowledge-items/{source_id}/chunks"), params=params
+                        urljoin(api_url, f"/api/knowledge-items/{source_value}/chunks"), params=params
                     )
                     if response.status_code != 200:
                         return _compact_json(
@@ -604,8 +694,8 @@ def register_docs_tools(mcp: FastMCP):
                                 "total": total,
                                 "page": page_value,
                                 "per_page": per_page_value,
-                                "has_more": payload.get("has_more", offset + per_page_value < total),
-                                "source_id": payload.get("source_id", source_id),
+                                "has_more": payload.get("has_more", page_offset + per_page_value < total),
+                                "source_id": payload.get("source_id", source_value),
                             },
                             "error": None,
                         }
