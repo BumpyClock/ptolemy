@@ -34,3 +34,4 @@ comparison_testing/test_runs/
 #.ai_agents files
 .ai_agents/.session_context/
 .ai_agents/plans/
+.lsp-mcp/
