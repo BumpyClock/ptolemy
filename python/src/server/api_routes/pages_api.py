@@ -42,6 +42,11 @@ class PageResponse(BaseModel):
     source_id: str
     url: str
     full_content: str
+    content_offset: int | None = None
+    content_limit: int | None = None
+    content_total: int | None = None
+    has_more: bool | None = None
+    next_offset: int | None = None
     section_title: str | None = None
     section_order: int = 0
     word_count: int
@@ -60,17 +65,33 @@ class PageListResponse(BaseModel):
     source_id: str
 
 
-def _handle_large_page_content(page_data: dict) -> dict:
+def _prepare_page_content(page_data: dict, offset: int | None, limit: int | None) -> dict:
     """
-    Replace full_content with a helpful message if page is too large for LLM context.
+    Prepare page content for retrieval, optionally slicing large pages.
 
     Args:
         page_data: Page data from database
+        offset: Optional slice offset
+        limit: Optional slice limit
 
     Returns:
-        Page data with full_content potentially replaced
+        Page data with full_content prepared for response
     """
+    content = page_data.get("full_content", "")
+    content_length = len(content)
     char_count = page_data.get("char_count", 0)
+
+    if offset is not None or limit is not None:
+        offset_value = max(offset or 0, 0)
+        limit_value = max(limit or MAX_PAGE_CHARS, 1)
+        end_value = min(offset_value + limit_value, content_length)
+        page_data["full_content"] = content[offset_value:end_value]
+        page_data["content_offset"] = offset_value
+        page_data["content_limit"] = limit_value
+        page_data["content_total"] = content_length
+        page_data["has_more"] = end_value < content_length
+        page_data["next_offset"] = end_value if end_value < content_length else None
+        return page_data
 
     if char_count > MAX_PAGE_CHARS:
         page_data["full_content"] = (
@@ -134,7 +155,11 @@ async def list_pages(
 
 
 @router.get("/pages/by-url")
-async def get_page_by_url(url: str = Query(..., description="The URL of the page to retrieve")):
+async def get_page_by_url(
+    url: str = Query(..., description="The URL of the page to retrieve"),
+    offset: int | None = Query(None, ge=0, description="Content slice offset"),
+    limit: int | None = Query(None, ge=1, le=MAX_PAGE_CHARS, description="Content slice length"),
+):
     """
     Get a single page by its URL.
 
@@ -155,8 +180,7 @@ async def get_page_by_url(url: str = Query(..., description="The URL of the page
         if not result.data:
             raise HTTPException(status_code=404, detail=f"Page not found for URL: {url}")
 
-        # Handle large pages
-        page_data = _handle_large_page_content(result.data.copy())
+        page_data = _prepare_page_content(result.data.copy(), offset, limit)
         return PageResponse(**page_data)
 
     except HTTPException:
@@ -168,7 +192,11 @@ async def get_page_by_url(url: str = Query(..., description="The URL of the page
 
 
 @router.get("/pages/{page_id}")
-async def get_page_by_id(page_id: str):
+async def get_page_by_id(
+    page_id: str,
+    offset: int | None = Query(None, ge=0, description="Content slice offset"),
+    limit: int | None = Query(None, ge=1, le=MAX_PAGE_CHARS, description="Content slice length"),
+):
     """
     Get a single page by its ID.
 
@@ -187,8 +215,7 @@ async def get_page_by_id(page_id: str):
         if not result.data:
             raise HTTPException(status_code=404, detail=f"Page not found: {page_id}")
 
-        # Handle large pages
-        page_data = _handle_large_page_content(result.data.copy())
+        page_data = _prepare_page_content(result.data.copy(), offset, limit)
         return PageResponse(**page_data)
 
     except HTTPException:

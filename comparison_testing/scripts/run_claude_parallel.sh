@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 log() {
   local ts
@@ -7,96 +8,256 @@ log() {
   echo "[${ts}] $*"
 }
 
+cleanup_root() {
+  local child_pids
+  child_pids="$(jobs -pr)"
+  if [[ -n "${child_pids}" ]]; then
+    kill ${child_pids} 2>/dev/null || true
+  fi
+}
+
+trap cleanup_root EXIT INT TERM
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPARISON_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_DIR="$(cd "${COMPARISON_DIR}/.." && pwd)"
 RUN_START_TIME="$(date +"%Y%m%d_%H%M%S")"
-RUN_DIR="${COMPARISON_DIR}/test_runs/claude/${RUN_START_TIME}"
-AGENTS_DIR="${RUN_DIR}/agents"
-DEFAULT_PROMPT_PATH="${COMPARISON_DIR}/mcp_comparison_framework_v2.md"
+RUN_BASE_DIR="${COMPARISON_DIR}/test_runs/claude/${RUN_START_TIME}"
+TEMPLATE_PROMPT_PATH="${COMPARISON_DIR}/templates/claude_prompt_template.md"
+DEFAULT_SCENARIO_DIR="${COMPARISON_DIR}/scenarios"
 REVIEW_TEMPLATE_PATH="${COMPARISON_DIR}/review_prompt.md"
 
 CLAUDE_CMD="${CLAUDE_CMD:-claude}"
 CLAUDE_RUN_ARGS_RAW="${CLAUDE_RUN_ARGS:-}"
 CLAUDE_REVIEW_ARGS_RAW="${CLAUDE_REVIEW_ARGS:-}"
+RUNS_PER_SCENARIO="${RUNS_PER_SCENARIO:-5}"
+MAX_SCENARIOS="${MAX_SCENARIOS:-0}"
+CLAUDE_TRIAL_MODEL="${CLAUDE_TRIAL_MODEL:-claude-haiku-4-5}"
+CLAUDE_SYNTHESIS_MODEL="${CLAUDE_SYNTHESIS_MODEL:-claude-sonnet-4-5}"
 
 read -r -a CLAUDE_RUN_ARGS <<< "${CLAUDE_RUN_ARGS_RAW}"
 read -r -a CLAUDE_REVIEW_ARGS <<< "${CLAUDE_REVIEW_ARGS_RAW}"
 
-mkdir -p "${AGENTS_DIR}"
+if [[ "${RUNS_PER_SCENARIO}" -lt 5 ]]; then
+  log "RUNS_PER_SCENARIO=${RUNS_PER_SCENARIO} < 5; using 5"
+  RUNS_PER_SCENARIO=5
+fi
 
 log "Stage: setup directories"
 
-PROMPT_SOURCE_PATH=""
-if [[ "${1:-}" == "-" ]]; then
+is_number() {
+  [[ "$1" =~ ^[0-9]+$ ]]
+}
+
+MAX_SCENARIOS_ARG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --max-scenarios=*)
+      MAX_SCENARIOS_ARG="${1#*=}"
+      shift
+      ;;
+    --max-scenarios)
+      shift
+      MAX_SCENARIOS_ARG="${1:-}"
+      shift || true
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+if [[ -n "${MAX_SCENARIOS_ARG}" ]]; then
+  if ! is_number "${MAX_SCENARIOS_ARG}"; then
+    echo "Invalid --max-scenarios value: ${MAX_SCENARIOS_ARG}"
+    exit 1
+  fi
+  MAX_SCENARIOS="${MAX_SCENARIOS_ARG}"
+fi
+
+build_prompt_from_template() {
+  local template_path="$1"
+  local scenario_path="$2"
+  local output_path="$3"
+
+  awk -v scenario_file="${scenario_path}" '
+    /{{TASK_SCENARIO}}/ {
+      while ((getline line < scenario_file) > 0) {
+        print line
+      }
+      close(scenario_file)
+      next
+    }
+    { print }
+  ' "${template_path}" > "${output_path}"
+}
+
+strip_test_structure() {
+  local source_path="$1"
+  local output_path="$2"
+
+  awk '
+    $0 ~ /^## Test Structure$/ { skipping=1; next }
+    $0 ~ /^## MCP Systems Under Test$/ { skipping=0 }
+    skipping==0 { print }
+  ' "${source_path}" > "${output_path}"
+}
+
+run_scenario() {
+  local scenario_label="$1"
+  local prompt_source_path="$2"
+  local run_dir="$3"
+  local total_runs="$4"
+
+  local agents_dir="${run_dir}/agents"
+  local prompt_path="${run_dir}/prompt.txt"
+  local -a pids=()
+  local completed_runs=0
+  local REVIEW_PROMPT_PATH
+  local CONSOLIDATED_OUT
+  local CONSOLIDATED_LOG
+
+  mkdir -p "${agents_dir}"
+
+  cleanup_runs() {
+    if [[ ${#pids[@]} -gt 0 ]]; then
+      kill "${pids[@]}" 2>/dev/null || true
+    fi
+  }
+
+  trap cleanup_runs EXIT INT TERM
+
+  strip_test_structure "${prompt_source_path}" "${prompt_path}"
+
+  log "Scenario: ${scenario_label}"
+  log "Run directory: ${run_dir}"
+  log "Prompt file: ${prompt_path}"
+  log "Claude trial model: ${CLAUDE_TRIAL_MODEL}"
+  log "Claude synthesis model: ${CLAUDE_SYNTHESIS_MODEL}"
+
+  log "Stage: launching ${total_runs} parallel Claude runs"
+  for i in $(seq 1 "${total_runs}"); do
+    run_id="$(printf "%02d" "${i}")"
+    out_file="${agents_dir}/run_${run_id}.txt"
+    log_file="${agents_dir}/run_${run_id}.log"
+    trial_prompt="${agents_dir}/prompt_${run_id}.txt"
+    sed "s/\\[N\\]/${i}/g" "${prompt_path}" > "${trial_prompt}"
+    log "Starting run ${run_id}"
+    "${CLAUDE_CMD}" --model "${CLAUDE_TRIAL_MODEL}" -p "$(cat "${trial_prompt}")" ${CLAUDE_RUN_ARGS[@]+"${CLAUDE_RUN_ARGS[@]}"} \
+      > "${out_file}" 2> "${log_file}" &
+    pids+=("$!")
+  done
+
+  log "Stage: waiting for runs to complete"
+  for pid in "${pids[@]}"; do
+    wait "${pid}"
+    completed_runs=$((completed_runs + 1))
+    log "Progress: ${completed_runs}/${total_runs} runs completed"
+  done
+  log "Stage: all runs completed"
+
+  REVIEW_PROMPT_PATH="${run_dir}/review_prompt.txt"
+  log "Stage: preparing consolidation prompt"
+  if [[ ! -f "${REVIEW_TEMPLATE_PATH}" ]]; then
+    echo "Review prompt template not found: ${REVIEW_TEMPLATE_PATH}"
+    exit 1
+  fi
+  sed -e "s|{{AGENTS_DIR}}|${agents_dir}|g" \
+    -e "s|{{RUN_COUNT}}|${total_runs}|g" \
+    -e "s|{{RUNNER_NAME}}|Claude|g" \
+    "${REVIEW_TEMPLATE_PATH}" > "${REVIEW_PROMPT_PATH}"
+    
+  CONSOLIDATED_OUT="${run_dir}/consolidated.md"
+  CONSOLIDATED_LOG="${run_dir}/consolidated.log"
+  log "Stage: running consolidation"
+  "${CLAUDE_CMD}" --model "${CLAUDE_SYNTHESIS_MODEL}" -p "$(cat "${REVIEW_PROMPT_PATH}")" ${CLAUDE_REVIEW_ARGS[@]+"${CLAUDE_REVIEW_ARGS[@]}"} \
+    > "${CONSOLIDATED_OUT}" 2> "${CONSOLIDATED_LOG}"
+
+  log "Stage: done"
+  log "Consolidated report: ${CONSOLIDATED_OUT}"
+}
+
+PROMPT_ARG="${1:-}"
+
+if [[ "${PROMPT_ARG}" == "-" ]]; then
+  RUN_DIR="${RUN_BASE_DIR}/stdin"
   log "Stage: reading prompt from stdin"
   PROMPT_SOURCE_PATH="${RUN_DIR}/prompt_source.txt"
+  mkdir -p "${RUN_DIR}"
   cat > "${PROMPT_SOURCE_PATH}"
-elif [[ "${1:-}" == "" ]]; then
-  log "Stage: using default prompt file"
-  PROMPT_SOURCE_PATH="${DEFAULT_PROMPT_PATH}"
-else
+  run_scenario "stdin" "${PROMPT_SOURCE_PATH}" "${RUN_DIR}" "${RUNS_PER_SCENARIO}"
+  exit 0
+fi
+
+if [[ "${PROMPT_ARG}" != "" ]]; then
+  RUN_DIR="${RUN_BASE_DIR}/custom"
   log "Stage: reading prompt from file"
-  PROMPT_SOURCE_PATH="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+  PROMPT_SOURCE_PATH="$(cd "$(dirname "${PROMPT_ARG}")" && pwd)/$(basename "${PROMPT_ARG}")"
+  if [[ ! -f "${PROMPT_SOURCE_PATH}" ]]; then
+    echo "Prompt file not found: ${PROMPT_SOURCE_PATH}"
+    exit 1
+  fi
+  mkdir -p "${RUN_DIR}"
+  run_scenario "custom" "${PROMPT_SOURCE_PATH}" "${RUN_DIR}" "${RUNS_PER_SCENARIO}"
+  exit 0
 fi
 
-if [[ ! -f "${PROMPT_SOURCE_PATH}" ]]; then
-  echo "Prompt file not found: ${PROMPT_SOURCE_PATH}"
+SCENARIO_DIR="${SCENARIO_DIR:-${DEFAULT_SCENARIO_DIR}}"
+if [[ ! -d "${SCENARIO_DIR}" ]]; then
+  echo "Scenario directory not found: ${SCENARIO_DIR}"
+  exit 1
+fi
+if [[ ! -f "${TEMPLATE_PROMPT_PATH}" ]]; then
+  echo "Template prompt not found: ${TEMPLATE_PROMPT_PATH}"
   exit 1
 fi
 
-PROMPT_PATH="${RUN_DIR}/prompt.txt"
-awk '
-  $0 ~ /^## Test Structure$/ { skipping=1; next }
-  $0 ~ /^## MCP Systems Under Test$/ { skipping=0 }
-  skipping==0 { print }
-' "${PROMPT_SOURCE_PATH}" > "${PROMPT_PATH}"
+scenario_files=("${SCENARIO_DIR}"/*.md)
+if [[ ${#scenario_files[@]} -eq 0 ]]; then
+  echo "No scenario files found in ${SCENARIO_DIR}"
+  exit 1
+fi
 
-log "Run directory: ${RUN_DIR}"
-log "Prompt file: ${PROMPT_PATH}"
-log "Claude trial model: claude-sonnet-4-5"
-log "Claude synthesis model: claude-opus-4-5"
+scenario_pids=()
+scenario_names=()
 
-total_runs=10
-pids=()
-log "Stage: launching ${total_runs} parallel Claude runs"
-for i in $(seq 1 "${total_runs}"); do
-  run_id="$(printf "%02d" "${i}")"
-  out_file="${AGENTS_DIR}/run_${run_id}.txt"
-  log_file="${AGENTS_DIR}/run_${run_id}.log"
-  trial_prompt="${AGENTS_DIR}/prompt_${run_id}.txt"
-  sed "s/\\[N\\]/${i}/g" "${PROMPT_PATH}" > "${trial_prompt}"
-  log "Starting run ${run_id}"
-  "${CLAUDE_CMD}" --model "claude-sonnet-4-5" -p "$(cat "${trial_prompt}")" ${CLAUDE_RUN_ARGS[@]+"${CLAUDE_RUN_ARGS[@]}"} \
-    > "${out_file}" 2> "${log_file}" &
-  pids+=("$!")
+wait_for_scenario_slot() {
+  if [[ "${MAX_SCENARIOS}" -le 0 ]]; then
+    return 0
+  fi
+  while [[ ${#scenario_pids[@]} -ge "${MAX_SCENARIOS}" ]]; do
+    local pid="${scenario_pids[0]}"
+    local name="${scenario_names[0]}"
+    wait "${pid}"
+    log "Scenario completed: ${name}"
+    scenario_pids=("${scenario_pids[@]:1}")
+    scenario_names=("${scenario_names[@]:1}")
+  done
+}
+
+for scenario_path in "${scenario_files[@]}"; do
+  scenario_name="$(basename "${scenario_path}" .md)"
+  RUN_DIR="${RUN_BASE_DIR}/${scenario_name}"
+  mkdir -p "${RUN_DIR}"
+  PROMPT_SOURCE_PATH="${RUN_DIR}/prompt_source.txt"
+  build_prompt_from_template "${TEMPLATE_PROMPT_PATH}" "${scenario_path}" "${PROMPT_SOURCE_PATH}"
+  run_scenario "${scenario_name}" "${PROMPT_SOURCE_PATH}" "${RUN_DIR}" "${RUNS_PER_SCENARIO}" &
+  scenario_pids+=("$!")
+  scenario_names+=("${scenario_name}")
+  wait_for_scenario_slot
 done
 
-log "Stage: waiting for runs to complete"
-completed_runs=0
-for pid in "${pids[@]}"; do
+completed_scenarios=0
+total_scenarios=${#scenario_pids[@]}
+while [[ ${#scenario_pids[@]} -gt 0 ]]; do
+  pid="${scenario_pids[0]}"
+  name="${scenario_names[0]}"
   wait "${pid}"
-  completed_runs=$((completed_runs + 1))
-  log "Progress: ${completed_runs}/${total_runs} runs completed"
+  completed_scenarios=$((completed_scenarios + 1))
+  log "Scenario completed: ${name} (${completed_scenarios}/${total_scenarios})"
+  scenario_pids=("${scenario_pids[@]:1}")
+  scenario_names=("${scenario_names[@]:1}")
 done
-log "Stage: all runs completed"
-
-REVIEW_PROMPT_PATH="${RUN_DIR}/review_prompt.txt"
-log "Stage: preparing consolidation prompt"
-if [[ ! -f "${REVIEW_TEMPLATE_PATH}" ]]; then
-  echo "Review prompt template not found: ${REVIEW_TEMPLATE_PATH}"
-  exit 1
-fi
-sed -e "s|{{AGENTS_DIR}}|${AGENTS_DIR}|g" \
-  -e "s|{{RUN_COUNT}}|${total_runs}|g" \
-  -e "s|{{RUNNER_NAME}}|Claude|g" \
-  "${REVIEW_TEMPLATE_PATH}" > "${REVIEW_PROMPT_PATH}"
-  
-CONSOLIDATED_OUT="${RUN_DIR}/consolidated.txt"
-CONSOLIDATED_LOG="${RUN_DIR}/consolidated.log"
-log "Stage: running consolidation"
-"${CLAUDE_CMD}" --model "claude-opus-4-5" -p "$(cat "${REVIEW_PROMPT_PATH}")" ${CLAUDE_REVIEW_ARGS[@]+"${CLAUDE_REVIEW_ARGS[@]}"} \
-  > "${CONSOLIDATED_OUT}" 2> "${CONSOLIDATED_LOG}"
-
-log "Stage: done"
-log "Consolidated report: ${CONSOLIDATED_OUT}"

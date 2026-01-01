@@ -92,6 +92,15 @@ class BaseStorageService(ABC):
                 if last_period > chunk_size * 0.3:
                     end = start + last_period + 1
 
+            chunk = text[start:end]
+            if chunk.count("```") % 2 == 1:
+                remainder = text[end:]
+                fence_pos = remainder.find("```")
+                if fence_pos != -1:
+                    extended_end = end + fence_pos + 3
+                    if extended_end - start <= chunk_size * 2:
+                        end = extended_end
+
             # Extract chunk and clean it up
             chunk = text[start:end].strip()
             if chunk:

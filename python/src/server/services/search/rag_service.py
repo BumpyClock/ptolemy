@@ -13,6 +13,7 @@ Multiple strategies can be enabled simultaneously and work together.
 """
 
 import os
+import re
 from typing import Any
 
 from ...config.logfire_config import get_logger, safe_span
@@ -244,6 +245,132 @@ class RAGService:
         page_results.sort(key=lambda x: x["aggregate_similarity"], reverse=True)
         return page_results[:match_count]
 
+    def _tokenize_query(self, query: str) -> list[str]:
+        return [token for token in re.findall(r"[a-z0-9._-]+", query.lower()) if len(token) > 1]
+
+    def _score_source(self, tokens: list[str], source: dict[str, Any]) -> int:
+        title = (source.get("title") or "").lower()
+        summary = (source.get("summary") or "").lower()
+        source_id = (source.get("source_id") or "").lower()
+        metadata = source.get("metadata") or {}
+        tags = metadata.get("tags") or []
+        tags_text = " ".join([str(tag).lower() for tag in tags])
+
+        score = 0
+        for token in tokens:
+            if token in title:
+                score += 4
+            if token in tags_text:
+                score += 3
+            if token in source_id:
+                score += 3
+            if token in summary:
+                score += 1
+        return score
+
+    def _infer_source_id(self, query: str) -> str | None:
+        tokens = self._tokenize_query(query)
+        if not tokens:
+            return None
+
+        response = (
+            self.supabase_client.table("ptolemy_sources")
+            .select("source_id, title, summary, metadata")
+            .execute()
+        )
+        sources = response.data if response and response.data else []
+        if not sources:
+            return None
+
+        scored = []
+        for source in sources:
+            score = self._score_source(tokens, source)
+            if score > 0:
+                scored.append((score, source.get("source_id")))
+
+        if not scored:
+            return None
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        top_score, top_id = scored[0]
+        second_score = scored[1][0] if len(scored) > 1 else 0
+
+        if top_score < 4:
+            return None
+        if second_score and top_score < second_score * 1.5:
+            return None
+        if not top_id:
+            return None
+        return top_id
+
+    def _needs_adjacent_chunk(self, content: str) -> tuple[bool, bool]:
+        fence_count = content.count("```")
+        if fence_count % 2 == 0:
+            return False, False
+        trimmed_start = content.lstrip()
+        trimmed_end = content.rstrip()
+        if trimmed_start.startswith("```") and not trimmed_end.endswith("```"):
+            return False, True
+        if trimmed_end.endswith("```") and not trimmed_start.startswith("```"):
+            return True, False
+        return True, True
+
+    def _fetch_adjacent_chunk_content(
+        self, page_id: str | None, chunk_number: int | None
+    ) -> tuple[str | None, str | None]:
+        if page_id is None or chunk_number is None:
+            return None, None
+        neighbors = [chunk_number - 1, chunk_number + 1]
+        neighbors = [value for value in neighbors if value >= 0]
+        if not neighbors:
+            return None, None
+        response = (
+            self.supabase_client.table("ptolemy_crawled_pages")
+            .select("chunk_number, content")
+            .eq("page_id", page_id)
+            .in_("chunk_number", neighbors)
+            .execute()
+        )
+        data = response.data if response and response.data else []
+        content_by_number = {row.get("chunk_number"): row.get("content") for row in data}
+        return content_by_number.get(chunk_number - 1), content_by_number.get(chunk_number + 1)
+
+    def _apply_content_limit(self, content: str, max_chars: int) -> tuple[str, bool]:
+        if len(content) <= max_chars:
+            return content, False
+        return content[:max_chars], True
+
+    def _expand_chunks_if_needed(
+        self, results: list[dict[str, Any]], max_chars: int
+    ) -> list[dict[str, Any]]:
+        expanded_results = []
+        for result in results:
+            content = result.get("content", "")
+            needs_prev, needs_next = self._needs_adjacent_chunk(content)
+            metadata = result.get("metadata") or {}
+            page_id = metadata.get("page_id")
+            chunk_number = metadata.get("chunk_number") or metadata.get("chunk_index")
+
+            prev_content = None
+            next_content = None
+            if needs_prev or needs_next:
+                prev_content, next_content = self._fetch_adjacent_chunk_content(page_id, chunk_number)
+
+            combined = content
+            if needs_prev and prev_content:
+                combined = prev_content.rstrip() + "\n\n" + combined
+            if needs_next and next_content:
+                combined = combined + "\n\n" + next_content.lstrip()
+
+            limited_content, truncated = self._apply_content_limit(combined, max_chars)
+            updated_metadata = dict(metadata)
+            updated_metadata["content_truncated"] = truncated
+            updated_metadata["content_length"] = len(combined)
+            result["content"] = limited_content
+            result["metadata"] = updated_metadata
+            expanded_results.append(result)
+        return expanded_results
+
     async def perform_rag_query(
         self, query: str, source: str = None, match_count: int = 5, return_mode: str = "chunks"
     ) -> tuple[bool, dict[str, Any]]:
@@ -269,6 +396,12 @@ class RAGService:
         ) as span:
             try:
                 logger.info(f"RAG query started: {query[:100]}{'...' if len(query) > 100 else ''}")
+
+                inferred_source = None
+                if not source:
+                    inferred_source = self._infer_source_id(query)
+                    if inferred_source:
+                        source = inferred_source
 
                 # Build filter metadata
                 filter_metadata = {"source": source} if source else None
@@ -301,10 +434,13 @@ class RAGService:
                 formatted_results = []
                 for i, result in enumerate(results):
                     try:
+                        metadata = dict(result.get("metadata") or {})
+                        if result.get("chunk_number") is not None and "chunk_number" not in metadata:
+                            metadata["chunk_number"] = result.get("chunk_number")
                         formatted_result = {
                             "id": result.get("id", f"result_{i}"),
-                            "content": result.get("content", "")[:1000],  # Limit content
-                            "metadata": result.get("metadata", {}),
+                            "content": result.get("content", ""),
+                            "metadata": metadata,
                             "similarity_score": result.get("similarity", 0.0),
                         }
                         formatted_results.append(formatted_result)
@@ -329,6 +465,9 @@ class RAGService:
                         if len(formatted_results) > match_count:
                             formatted_results = formatted_results[:match_count]
 
+                if return_mode == "chunks":
+                    formatted_results = self._expand_chunks_if_needed(formatted_results, 4000)
+
                 # Step 4: Group by pages if return_mode="pages" AND pages exist
                 actual_return_mode = return_mode
                 if return_mode == "pages":
@@ -351,6 +490,8 @@ class RAGService:
                     "results": formatted_results,
                     "query": query,
                     "source": source,
+                    "source_inferred": bool(inferred_source),
+                    "source_inferred_id": inferred_source,
                     "match_count": match_count,
                     "total_found": len(formatted_results),
                     "execution_path": "rag_service_pipeline",

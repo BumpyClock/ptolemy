@@ -363,6 +363,8 @@ def register_docs_tools(mcp: FastMCP):
         page_id: str | None = None,
         url: str | None = None,
         domain_filter: str | None = None,
+        offset: Annotated[int | None, Field(ge=0, description="Content slice offset")] = None,
+        limit: Annotated[int | None, Field(ge=1, description="Content slice length")] = None,
     ) -> str:
         """
         Fetch deterministic documentation data without search.
@@ -499,9 +501,13 @@ def register_docs_tools(mcp: FastMCP):
                             }
                         )
                     if page_id:
-                        response = await client.get(urljoin(api_url, f"/api/pages/{page_id}"))
+                        params = _drop_none({"offset": offset, "limit": limit})
+                        response = await client.get(
+                            urljoin(api_url, f"/api/pages/{page_id}"), params=params
+                        )
                     else:
-                        response = await client.get(urljoin(api_url, "/api/pages/by-url"), params={"url": url})
+                        params = _drop_none({"url": url, "offset": offset, "limit": limit})
+                        response = await client.get(urljoin(api_url, "/api/pages/by-url"), params=params)
                     if response.status_code != 200:
                         return _compact_json(
                             {

@@ -7,6 +7,8 @@ batch crawling, recursive crawling, and overall orchestration with progress trac
 """
 
 import asyncio
+import hashlib
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, Optional
@@ -844,6 +846,28 @@ class CrawlingService:
             # Fallback to simple string comparison
             return link.rstrip('/') == base_url.rstrip('/')
 
+    def _build_llms_link_index_docs(
+        self, base_url: str, links: list[tuple[str, str]]
+    ) -> list[dict[str, str]]:
+        documents: list[dict[str, str]] = []
+        for link, text in links:
+            display_text = text.strip() if text and isinstance(text, str) else link
+            slug_base = re.sub(r"[^a-z0-9]+", "-", display_text.lower()).strip("-")
+            if not slug_base:
+                slug_base = re.sub(r"[^a-z0-9]+", "-", link.lower()).strip("-")
+            if not slug_base:
+                slug_base = "link"
+            link_hash = hashlib.sha1(link.encode("utf-8")).hexdigest()[:8]
+            synthetic_url = f"{base_url}#llms-link-{slug_base}-{link_hash}"
+            markdown = f"# {display_text}\n\n{link}\n\nSource: {base_url}"
+            documents.append({
+                "url": synthetic_url,
+                "markdown": markdown,
+                "title": display_text,
+                "description": f"Link from {base_url}",
+            })
+        return documents
+
     async def _crawl_by_url_type(self, url: str, request: dict[str, Any]) -> tuple:
         """
         Detect URL type and perform appropriate crawling.
@@ -929,6 +953,9 @@ class CrawlingService:
 
                                 # Combine original llms.txt with linked pages
                                 crawl_results.extend(batch_results)
+                                index_docs = self._build_llms_link_index_docs(url, same_domain_links)
+                                if index_docs:
+                                    crawl_results.extend(index_docs)
                                 crawl_type = "llms_txt_with_linked_pages"
                                 logger.info(f"llms.txt crawling completed: {len(crawl_results)} total pages (1 llms.txt + {len(batch_results)} linked pages)")
                                 return crawl_results, crawl_type

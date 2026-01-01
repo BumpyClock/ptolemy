@@ -57,7 +57,8 @@ CREATE TRIGGER update_ptolemy_settings_updated_at
 ALTER TABLE ptolemy_settings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow service role full access" ON ptolemy_settings
-    FOR ALL USING (auth.role() = 'service_role');
+    FOR ALL TO service_role
+    USING (true);
 
 CREATE POLICY "Allow authenticated users to read and update" ON ptolemy_settings
     FOR ALL TO authenticated
@@ -1053,7 +1054,11 @@ COMMENT ON COLUMN ptolemy_migrations.checksum IS 'Optional MD5 checksum of migra
 -- Record all migrations as applied since this is a complete setup
 -- This ensures the migration system knows the database is fully up-to-date
 INSERT INTO ptolemy_migrations (version, migration_name)
-VALUES ('0.1.0', 'complete_setup')
+VALUES
+  ('0.1.0', 'complete_setup'),
+  ('0.1.0', '1_add_concurrent_crawl_limit.sql'),
+  ('0.1.0', '2_add_defer_code_summaries.sql'),
+  ('0.1.0', '3_fix_rls_policy_performance.sql')
 ON CONFLICT (version, migration_name) DO NOTHING;
 
 -- Enable Row Level Security on migrations table
@@ -1066,7 +1071,8 @@ DROP POLICY IF EXISTS "Allow authenticated users to read ptolemy_migrations" ON 
 -- Create RLS policies for migrations table
 -- Service role has full access
 CREATE POLICY "Allow service role full access to ptolemy_migrations" ON ptolemy_migrations
-    FOR ALL USING (auth.role() = 'service_role');
+    FOR ALL TO service_role
+    USING (true);
 
 -- Authenticated users can only read migrations (they cannot modify migration history)
 CREATE POLICY "Allow authenticated users to read ptolemy_migrations" ON ptolemy_migrations
@@ -1108,19 +1114,24 @@ ALTER TABLE ptolemy_prompts ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies for service role (full access)
 CREATE POLICY "Allow service role full access to ptolemy_projects" ON ptolemy_projects
-    FOR ALL USING (auth.role() = 'service_role');
+    FOR ALL TO service_role
+    USING (true);
 
 CREATE POLICY "Allow service role full access to ptolemy_tasks" ON ptolemy_tasks
-    FOR ALL USING (auth.role() = 'service_role');
+    FOR ALL TO service_role
+    USING (true);
 
 CREATE POLICY "Allow service role full access to ptolemy_project_sources" ON ptolemy_project_sources
-    FOR ALL USING (auth.role() = 'service_role');
+    FOR ALL TO service_role
+    USING (true);
 
 CREATE POLICY "Allow service role full access to ptolemy_document_versions" ON ptolemy_document_versions
-    FOR ALL USING (auth.role() = 'service_role');
+    FOR ALL TO service_role
+    USING (true);
 
 CREATE POLICY "Allow service role full access to ptolemy_prompts" ON ptolemy_prompts
-    FOR ALL USING (auth.role() = 'service_role');
+    FOR ALL TO service_role
+    USING (true);
 
 -- Create RLS policies for authenticated users
 CREATE POLICY "Allow authenticated users to read and update ptolemy_projects" ON ptolemy_projects
