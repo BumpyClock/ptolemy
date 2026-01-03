@@ -270,29 +270,11 @@ When connected to Claude/Cursor/Windsurf, the following tools are available:
 - `ptolemy:docs_answer` - RAG-backed answers from docs and code examples
 - `ptolemy:docs_fetch` - Deterministic retrieval and listing for sources and pages
 
-### Project Management
 
-- `ptolemy:find_projects` - Find all projects, search, or get specific project (by project_id)
-- `ptolemy:manage_project` - Manage projects with actions: "create", "update", "delete"
 
-### Task Management
-
-- `ptolemy:find_tasks` - Find tasks with search, filters, or get specific task (by task_id)
-- `ptolemy:manage_task` - Manage tasks with actions: "create", "update", "delete"
-
-### Document Management
-
-- `ptolemy:find_documents` - Find documents, search, or get specific document (by document_id)
-- `ptolemy:manage_document` - Manage documents with actions: "create", "update", "delete"
-
-### Version Control
-
-- `ptolemy:find_versions` - Find version history or get specific version
-- `ptolemy:manage_version` - Manage versions with actions: "create", "restore"
 
 ## Important Notes
 
-- Projects feature is optional - toggle in Settings UI
 - HTTP polling handles all updates
 - Frontend uses Vite proxy for API calls in development
 - Python backend uses `uv` for dependency management

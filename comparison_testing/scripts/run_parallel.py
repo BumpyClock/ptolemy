@@ -139,16 +139,16 @@ def build_config(args: argparse.Namespace, comparison_dir: Path) -> RunnerConfig
         review_template_path=review_template_path,
         final_review_template_path=final_review_template_path,
         run_base_dir=run_base_dir,
-        claude_cmd=os.getenv("CLAUDE_CMD", "claude"),
+        claude_cmd=os.getenv("CLAUDE_CMD", "cz"),
         claude_run_args=parse_args_list(os.getenv("CLAUDE_RUN_ARGS", "")),
         claude_review_args=parse_args_list(os.getenv("CLAUDE_REVIEW_ARGS", "")),
-        claude_trial_model=os.getenv("CLAUDE_TRIAL_MODEL", "claude-haiku-4-5"),
-        claude_synthesis_model=os.getenv("CLAUDE_SYNTHESIS_MODEL", "claude-haiku-4-5"),
+        claude_trial_model=os.getenv("CLAUDE_TRIAL_MODEL", "claude-sonnet-4-5"),
+        claude_synthesis_model=os.getenv("CLAUDE_SYNTHESIS_MODEL", "claude-sonnet-4-5"),
         codex_model=os.getenv("CODEX_MODEL", "gpt-5.1-codex-mini"),
         codex_run_args=parse_args_list(os.getenv("CODEX_RUN_ARGS", "")),
         codex_review_args=parse_args_list(os.getenv("CODEX_REVIEW_ARGS", "")),
-        codex_run_thinking=os.getenv("CODEX_RUN_THINKING", "low"),
-        codex_review_thinking=os.getenv("CODEX_REVIEW_THINKING", "medium"),
+        codex_run_thinking=os.getenv("CODEX_RUN_THINKING", "medium"),
+        codex_review_thinking=os.getenv("CODEX_REVIEW_THINKING", "high"),
     )
 
 
