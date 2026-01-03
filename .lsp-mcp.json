@@ -2,6 +2,11 @@
   "languages": ["python", "typescript", "javascript"],
   "tools": {
     "preset": "standard",
-    "disable": ["initialSetup"]
+    "disable": [
+      "listFiles",
+      "readSourceCode",
+      "findIdentifier",
+      "findReferencedSymbols"
+    ]
   }
 }
