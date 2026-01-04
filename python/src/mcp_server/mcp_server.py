@@ -89,12 +89,13 @@ class PtolemyMCP(FastMCP):
                 continue
             if tool.name == "docs_answer":
                 tool.description = (
-                    "Search docs/code. Use query; optional source_id filter; kind: doc|code_example."
+                    "Search docs/code. Use query; optional source_id filter; kind: doc|code_example; "
+                    "return_mode: chunks|pages (default chunks)."
                 )
             elif tool.name == "docs_fetch":
                 tool.description = (
-                    "Fetch docs data. Set kind; source_id required for pages/code_examples/chunks; "
-                    "use page_id or url for page."
+                    "Fetch docs data. kind: sources|pages|page|code_examples|chunks; "
+                    "source_id required for pages/code_examples/chunks; use page_id or url for page."
                 )
             tool.inputSchema = _strip_schema_keys(
                 tool.inputSchema,
@@ -102,8 +103,9 @@ class PtolemyMCP(FastMCP):
             )
             properties = tool.inputSchema.get("properties") if isinstance(tool.inputSchema, dict) else None
             if isinstance(properties, dict):
+                keep_descriptions = {"source_id", "kind", "return_mode", "page_id", "url", "match_count"}
                 for key, prop in properties.items():
-                    if key == "source_id":
+                    if key in keep_descriptions:
                         continue
                     if isinstance(prop, dict):
                         prop.pop("description", None)
@@ -244,18 +246,22 @@ MCP_INSTRUCTIONS = """
 When searching specific documentation:
 1. Get available sources: docs_fetch(kind="sources")
 2. Find source ID: match the user request to a source title
-3. Run search: docs_answer(query="...", source_id="src_xxx", match_count=5)
+3. Run search: docs_answer(query="...", source_id="src_xxx", match_count=5, return_mode="chunks")
 
 Examples:
 - User: "Search the Supabase docs for vector functions"
   1. Call docs_fetch(kind="sources")
   2. Find Supabase source ID from results (e.g., "src_abc123")
-  3. Call docs_answer(query="vector functions", source_id="src_abc123")
+  3. Call docs_answer(query="vector functions", source_id="src_abc123", return_mode="chunks")
 
 - User: "Find authentication examples in the MCP documentation"
   1. Call docs_fetch(kind="sources")
   2. Find MCP docs source ID
   3. Call docs_answer(query="authentication", kind=["code_example"], source_id="src_def456")
+
+Notes:
+- docs_answer return_mode accepts only "chunks" or "pages"
+- docs_fetch kind accepts only "sources", "pages", "page", "code_examples", or "chunks"
 
 IMPORTANT: Always use source_id for filtering
 """
