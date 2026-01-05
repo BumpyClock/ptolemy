@@ -9,6 +9,7 @@ import os
 from typing import Any
 
 from ...config.logfire_config import safe_span, search_logger
+from ..crawling.helpers.url_handler import URLHandler
 from ..embeddings.contextual_embedding_service import generate_contextual_embeddings_batch
 from ..embeddings.embedding_service import create_embeddings_batch
 
@@ -106,12 +107,42 @@ async def add_documents_to_supabase(
         # Get unique URLs to delete existing records
         unique_urls = list(set(urls))
 
-        # Delete existing records for these URLs in batches
+        # Prefer deleting by page_id when available (canonical dedupe)
+        # This ensures we delete all chunks for the canonical page, not just by raw URL
+        unique_page_ids = list(set(
+            page_id for url in unique_urls
+            if (page_id := (url_to_page_id.get(url) if url_to_page_id else None))
+        )) if url_to_page_id else []
+
+        # Delete existing records in batches
         try:
-            if unique_urls:
-                # Delete in configured batch sizes
+            if unique_page_ids:
+                # Delete by page_id (preferred - enables canonical dedupe)
+                for i in range(0, len(unique_page_ids), delete_batch_size):
+                    if cancellation_check:
+                        try:
+                            cancellation_check()
+                        except asyncio.CancelledError:
+                            if progress_callback:
+                                await progress_callback(
+                                    "cancelled",
+                                    99,
+                                    "Storage cancelled during deletion",
+                                    current_batch=i // delete_batch_size + 1,
+                                    total_batches=(len(unique_page_ids) + delete_batch_size - 1) // delete_batch_size
+                                )
+                            raise
+
+                    batch_page_ids = unique_page_ids[i : i + delete_batch_size]
+                    client.table("ptolemy_crawled_pages").delete().in_("page_id", batch_page_ids).execute()
+                    if i + delete_batch_size < len(unique_page_ids):
+                        await asyncio.sleep(0.05)
+                search_logger.info(
+                    f"Deleted existing chunks for {len(unique_page_ids)} canonical pages by page_id"
+                )
+            elif unique_urls:
+                # Fallback: delete by URL (legacy behavior for chunks without page_id)
                 for i in range(0, len(unique_urls), delete_batch_size):
-                    # Check for cancellation before each delete batch
                     if cancellation_check:
                         try:
                             cancellation_check()
@@ -128,19 +159,22 @@ async def add_documents_to_supabase(
 
                     batch_urls = unique_urls[i : i + delete_batch_size]
                     client.table("ptolemy_crawled_pages").delete().in_("url", batch_urls).execute()
-                    # Yield control to allow other async operations
                     if i + delete_batch_size < len(unique_urls):
-                        await asyncio.sleep(0.05)  # Reduced pause between delete batches
+                        await asyncio.sleep(0.05)
                 search_logger.info(
-                    f"Deleted existing records for {len(unique_urls)} URLs in batches"
+                    f"Deleted existing records for {len(unique_urls)} URLs in batches (legacy mode)"
                 )
         except Exception as e:
             search_logger.warning(f"Batch delete failed: {e}. Trying smaller batches as fallback.")
             # Fallback: delete in smaller batches with rate limiting
-            failed_urls = []
+            failed_items = []
             fallback_batch_size = max(1, min(10, delete_batch_size // 5))
-            for i in range(0, len(unique_urls), fallback_batch_size):
-                # Check for cancellation before each fallback delete batch
+
+            # Try page_id fallback first, then URL fallback
+            items_to_delete = unique_page_ids if unique_page_ids else unique_urls
+            delete_column = "page_id" if unique_page_ids else "url"
+
+            for i in range(0, len(items_to_delete), fallback_batch_size):
                 if cancellation_check:
                     try:
                         cancellation_check()
@@ -151,22 +185,22 @@ async def add_documents_to_supabase(
                                 99,
                                 "Storage cancelled during fallback deletion",
                                 current_batch=i // fallback_batch_size + 1,
-                                total_batches=(len(unique_urls) + fallback_batch_size - 1) // fallback_batch_size
+                                total_batches=(len(items_to_delete) + fallback_batch_size - 1) // fallback_batch_size
                             )
                         raise
 
-                batch_urls = unique_urls[i : i + fallback_batch_size]
+                batch_items = items_to_delete[i : i + fallback_batch_size]
                 try:
-                    client.table("ptolemy_crawled_pages").delete().in_("url", batch_urls).execute()
-                    await asyncio.sleep(0.05)  # Rate limit to prevent overwhelming
+                    client.table("ptolemy_crawled_pages").delete().in_(delete_column, batch_items).execute()
+                    await asyncio.sleep(0.05)
                 except Exception as inner_e:
                     search_logger.error(
-                        f"Error deleting batch of {len(batch_urls)} URLs: {inner_e}"
+                        f"Error deleting batch of {len(batch_items)} {delete_column}s: {inner_e}"
                     )
-                    failed_urls.extend(batch_urls)
+                    failed_items.extend(batch_items)
 
-            if failed_urls:
-                search_logger.error(f"Failed to delete {len(failed_urls)} URLs")
+            if failed_items:
+                search_logger.error(f"Failed to delete {len(failed_items)} {delete_column}s")
 
         # Check if contextual embeddings are enabled (use credential_service)
 
@@ -429,8 +463,13 @@ async def add_documents_to_supabase(
                 # Get page_id for this URL if available
                 page_id = url_to_page_id.get(batch_urls[j]) if url_to_page_id else None
 
+                # Compute canonical_url for this chunk (matches parent page's canonical_url)
+                chunk_url = batch_urls[j]
+                canonical_url = URLHandler.canonicalize_page_url(chunk_url)
+
                 data = {
-                    "url": batch_urls[j],
+                    "url": chunk_url,
+                    "canonical_url": canonical_url,
                     "chunk_number": batch_chunk_numbers[j],
                     "content": text,  # Use the successful text
                     "metadata": {"chunk_size": len(text), **batch_metadatas[j]},

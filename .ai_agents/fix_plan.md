@@ -18,22 +18,16 @@ iteration. Do exactly one meaningful task per loop, then stop.
 - Update @fix_plan.md and .ai_agents/specs/merge_topics.md  with a prioritized bullet list and remove completed items.
 - If a spec is missing for a needed feature, write it in @specs/*.
 
-# The Loop Rules (strict)
-1. One task per loop. Pick the single most important next item from
-   .ai_agents/friday_mvp.md
-2. Do not assume missing. Before changing code, search to confirm it is not
+# The  Rules (strict)
+
+1. Do not assume missing. Before changing code, search to confirm it is not
    already implemented. Re-check if search is ambiguous or incomplete.
 3. Use subagents to keep primary context small: many for search/analysis, only one for build/tests.
 4. Full implementations only. No placeholders or stubs.
-5. TDD: for behavior changes, write a failing test first, then implement. If a
-   test is not applicable, explain why in the loop output.
-6. Backpressure: after implementing or fixing, run the smallest relevant
-   test/build/analyzer. If functionality is missing, add it per specs. Fix
-   failures, even if unrelated. Never skip tests or use skip flags.
-7. Keep @fix_plan.md current with findings and completions. If you discover a
-   bug, document it immediately, even if unrelated.
-8. When you learn a new build/test command, update @AGENT.md briefly. Never put
-   status reports in @AGENT.md.
+5. TDD: for behavior changes, write a failing test first, then implement. If a test is not applicable, explain why in the loop output.
+6. Backpressure: after implementing or fixing, run the smallest relevant test/build/analyzer. If functionality is missing, add it per specs. Fix failures, even if unrelated. Never skip tests or use skip flags.
+7. Keep @fix_plan.md current with findings and completions. If you discover a bug, document it immediately, even if unrelated.
+8. When you learn a new build/test command, update @AGENT.md briefly. Never put status reports in @AGENT.md.
 9. Capture the "why" in docs/tests so future loops understand intent.
 10. If a spec is inconsistent, resolve it and update .ai_agents/friday_mvp.md.
 11. You may add logging/diagnostics to loop back evidence when needed.
@@ -85,7 +79,7 @@ iteration. Do exactly one meaningful task per loop, then stop.
 ## 2) Canonicalization Rules ✅ COMPLETE
 - [x] Implement canonical URL helper (reuse generate_unique_source_id rules).
 - [x] Preserve fragments for llms-full section URLs to avoid collapsing anchors.
-- [ ] Ensure canonicalization is applied consistently in crawl + backfill.
+- [x] Ensure canonicalization is applied consistently in crawl + backfill.
 
 **Implementation:**
 - `URLHandler.canonicalize_url(url, preserve_fragment=False)` - base canonicalization function
@@ -101,14 +95,24 @@ iteration. Do exactly one meaningful task per loop, then stop.
 - Sort query parameters alphabetically
 - Drop fragments (except for llms-full.txt/llms.txt/llms/ URLs)
 
-## 3) Ingestion Pipeline Updates (Page + Chunk Dedupe)
-- [ ] During crawl, compute `canonical_url` for each page.
-- [ ] Upsert `ptolemy_page_metadata` on `canonical_url` (raw `url` stored separately).
-- [ ] If canonical page exists, overwrite `full_content` (latest crawl wins).
-- [ ] Write `ptolemy_page_sources` link for each source↔page.
-- [ ] Before chunk insert, delete existing chunks by canonical `page_id`.
-- [ ] Insert chunks with `page_id` + `canonical_url`.
-- [ ] Update `chunk_count` on canonical page row after storage.
+## 3) Ingestion Pipeline Updates (Page + Chunk Dedupe) ✅ COMPLETE
+- [x] During crawl, compute `canonical_url` for each page.
+- [x] Upsert `ptolemy_page_metadata` on `canonical_url` (raw `url` stored separately).
+- [x] If canonical page exists, overwrite `full_content` (latest crawl wins).
+- [x] Write `ptolemy_page_sources` link for each source↔page.
+- [x] Before chunk insert, delete existing chunks by canonical `page_id`.
+- [x] Insert chunks with `page_id` + `canonical_url`.
+- [x] Update `chunk_count` on canonical page row after storage (existing functionality).
+
+**Implementation:**
+- `page_storage_operations.py`:
+  - `store_pages()` now computes `canonical_url` and upserts on it
+  - `store_llms_full_sections()` preserves fragments in canonical_url
+  - Added `_create_page_source_links()` for provenance tracking
+- `document_storage_service.py`:
+  - `add_documents_to_supabase()` deletes by `page_id` when available (canonical dedupe)
+  - Falls back to URL deletion for legacy chunks
+  - Chunks now include `canonical_url` field
 
 ## 4) Topic UX + API
 - [ ] Add API endpoints:

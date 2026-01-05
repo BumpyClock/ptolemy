@@ -11,6 +11,7 @@ from postgrest.exceptions import APIError
 
 from ...config.logfire_config import get_logger, safe_logfire_error, safe_logfire_info
 from .helpers.llms_full_parser import parse_llms_full_sections
+from .helpers.url_handler import URLHandler
 
 logger = get_logger(__name__)
 
@@ -42,6 +43,10 @@ class PageStorageOperations:
         """
         Store pages in ptolemy_page_metadata table from regular crawl results.
 
+        Pages are deduplicated by canonical_url, allowing the same content to be
+        referenced by multiple sources. The ptolemy_page_sources join table tracks
+        which sources reference each page.
+
         Args:
             crawl_results: List of crawled documents with url, markdown, title, etc.
             source_id: The source ID these pages belong to
@@ -57,6 +62,7 @@ class PageStorageOperations:
 
         url_to_page_id: dict[str, str] = {}
         pages_to_insert: list[dict[str, Any]] = []
+        canonical_to_url: dict[str, str] = {}  # Track canonical → raw url mapping
 
         for doc in crawl_results:
             url = doc.get("url", "").strip()
@@ -66,6 +72,9 @@ class PageStorageOperations:
             if not url or not markdown:
                 continue
 
+            # Compute canonical URL for deduplication
+            canonical_url = URLHandler.canonicalize_page_url(url)
+
             # Prepare page record
             word_count = len(markdown.split())
             char_count = len(markdown)
@@ -73,6 +82,7 @@ class PageStorageOperations:
             page_record = {
                 "source_id": source_id,
                 "url": url,
+                "canonical_url": canonical_url,
                 "full_content": markdown,
                 "section_title": None,  # Regular page, not a section
                 "section_order": 0,
@@ -87,26 +97,42 @@ class PageStorageOperations:
                 },
             }
             pages_to_insert.append(page_record)
+            canonical_to_url[canonical_url] = url
 
-        # Batch upsert pages
+        # Batch upsert pages (deduped by canonical_url)
         if pages_to_insert:
             try:
                 safe_logfire_info(
-                    f"Upserting {len(pages_to_insert)} pages into ptolemy_page_metadata table"
+                    f"Upserting {len(pages_to_insert)} pages into ptolemy_page_metadata table (by canonical_url)"
                 )
                 result = (
                     self.supabase_client.table("ptolemy_page_metadata")
-                    .upsert(pages_to_insert, on_conflict="url")
+                    .upsert(pages_to_insert, on_conflict="canonical_url")
                     .execute()
                 )
 
-                # Build url → page_id mapping
+                # Build url → page_id mapping (map both raw URL and canonical URL to page_id)
+                page_ids_for_source_links: list[str] = []
                 for page in result.data:
-                    url_to_page_id[page["url"]] = page["id"]
+                    page_id = page["id"]
+                    canonical = page.get("canonical_url")
+                    raw_url = page.get("url")
+
+                    # Map both the raw URL and any URL that canonicalizes to the same value
+                    if raw_url:
+                        url_to_page_id[raw_url] = page_id
+                    if canonical and canonical in canonical_to_url:
+                        original_url = canonical_to_url[canonical]
+                        url_to_page_id[original_url] = page_id
+
+                    page_ids_for_source_links.append(page_id)
 
                 safe_logfire_info(
-                    f"Successfully stored {len(url_to_page_id)}/{len(pages_to_insert)} pages in ptolemy_page_metadata"
+                    f"Successfully stored {len(page_ids_for_source_links)}/{len(pages_to_insert)} pages in ptolemy_page_metadata"
                 )
+
+                # Create page-source provenance links
+                await self._create_page_source_links(page_ids_for_source_links, source_id)
 
             except APIError as e:
                 safe_logfire_error(
@@ -135,7 +161,9 @@ class PageStorageOperations:
         """
         Store llms-full.txt sections as separate pages.
 
-        Each H1 section gets its own page record with a synthetic URL.
+        Each H1 section gets its own page record with a synthetic URL that includes
+        a fragment identifier (e.g., #Authentication). The fragment is preserved in
+        the canonical_url for llms-full URLs to distinguish sections.
 
         Args:
             base_url: Base URL of the llms-full.txt file
@@ -162,11 +190,17 @@ class PageStorageOperations:
 
         # Prepare page records for each section
         pages_to_insert: list[dict[str, Any]] = []
+        canonical_to_url: dict[str, str] = {}
 
         for section in sections:
+            # For llms-full sections, the URL already includes the fragment
+            # canonicalize_page_url preserves fragments for llms-full URLs
+            canonical_url = URLHandler.canonicalize_page_url(section.url)
+
             page_record = {
                 "source_id": source_id,
                 "url": section.url,
+                "canonical_url": canonical_url,
                 "full_content": section.content,
                 "section_title": section.section_title,
                 "section_order": section.section_order,
@@ -186,26 +220,41 @@ class PageStorageOperations:
                 },
             }
             pages_to_insert.append(page_record)
+            canonical_to_url[canonical_url] = section.url
 
-        # Batch upsert pages
+        # Batch upsert pages (deduped by canonical_url)
         if pages_to_insert:
             try:
                 safe_logfire_info(
-                    f"Upserting {len(pages_to_insert)} section pages into ptolemy_page_metadata"
+                    f"Upserting {len(pages_to_insert)} section pages into ptolemy_page_metadata (by canonical_url)"
                 )
                 result = (
                     self.supabase_client.table("ptolemy_page_metadata")
-                    .upsert(pages_to_insert, on_conflict="url")
+                    .upsert(pages_to_insert, on_conflict="canonical_url")
                     .execute()
                 )
 
                 # Build url → page_id mapping
+                page_ids_for_source_links: list[str] = []
                 for page in result.data:
-                    url_to_page_id[page["url"]] = page["id"]
+                    page_id = page["id"]
+                    canonical = page.get("canonical_url")
+                    raw_url = page.get("url")
+
+                    if raw_url:
+                        url_to_page_id[raw_url] = page_id
+                    if canonical and canonical in canonical_to_url:
+                        original_url = canonical_to_url[canonical]
+                        url_to_page_id[original_url] = page_id
+
+                    page_ids_for_source_links.append(page_id)
 
                 safe_logfire_info(
-                    f"Successfully stored {len(url_to_page_id)}/{len(pages_to_insert)} section pages"
+                    f"Successfully stored {len(page_ids_for_source_links)}/{len(pages_to_insert)} section pages"
                 )
+
+                # Create page-source provenance links
+                await self._create_page_source_links(page_ids_for_source_links, source_id)
 
             except APIError as e:
                 safe_logfire_error(
@@ -245,4 +294,51 @@ class PageStorageOperations:
         except Exception as e:
             logger.warning(
                 f"Unexpected error updating chunk_count for page {page_id}: {e}", exc_info=True
+            )
+
+    async def _create_page_source_links(self, page_ids: list[str], source_id: str) -> None:
+        """
+        Create or update page-source provenance links in ptolemy_page_sources.
+
+        This tracks which sources reference each page, enabling provenance tracking
+        and multi-source page queries.
+
+        Args:
+            page_ids: List of page UUIDs to link
+            source_id: The source ID to link to the pages
+        """
+        if not page_ids:
+            return
+
+        try:
+            # Prepare link records with upsert semantics
+            links_to_upsert = [
+                {
+                    "page_id": page_id,
+                    "source_id": source_id,
+                    "last_seen_at": "now()",  # Update timestamp on re-crawl
+                }
+                for page_id in page_ids
+            ]
+
+            # Upsert links - updates last_seen_at if link exists
+            self.supabase_client.table("ptolemy_page_sources").upsert(
+                links_to_upsert,
+                on_conflict="page_id,source_id",
+            ).execute()
+
+            safe_logfire_info(
+                f"Created/updated {len(links_to_upsert)} page-source links for source_id={source_id}"
+            )
+
+        except APIError as e:
+            # Don't fail the crawl if page-source linking fails
+            logger.warning(
+                f"Database error creating page-source links | source_id={source_id} | pages={len(page_ids)} | error={str(e)}",
+                exc_info=True,
+            )
+        except Exception as e:
+            logger.warning(
+                f"Unexpected error creating page-source links | source_id={source_id} | pages={len(page_ids)} | error={str(e)}",
+                exc_info=True,
             )
