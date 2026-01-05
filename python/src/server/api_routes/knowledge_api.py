@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 # Import unified logging
 from ..config.logfire_config import get_logger, safe_logfire_error, safe_logfire_info
+from ..services.crawl_operation_store import get_crawl_operation_store
 from ..services.crawler_manager import get_crawler
 from ..services.crawling import CrawlingService
 from ..services.credential_service import credential_service
@@ -39,8 +40,8 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api", tags=["knowledge"])
 
 
-# Create a semaphore to limit concurrent crawl OPERATIONS (not pages within a crawl)
-# This prevents the server from becoming unresponsive during heavy crawling
+# Concurrency control and task tracking is now database-backed via ptolemy_crawl_operations
+# and ptolemy_crawl_slots tables. This enables multi-worker correctness.
 #
 # IMPORTANT: This is different from CRAWL_MAX_CONCURRENT (configured in UI/database):
 # - CONCURRENT_CRAWL_LIMIT: Max number of separate crawl operations that can run simultaneously (server protection)
@@ -48,36 +49,59 @@ router = APIRouter(prefix="/api", tags=["knowledge"])
 # - CRAWL_MAX_CONCURRENT: Max number of pages that can be crawled in parallel within a single crawl operation
 #   Example: While crawling site1.com, fetch up to 10 pages simultaneously
 #
-# The default limit of 3 protects the server from being overwhelmed by multiple users
-# starting crawls at the same time. Each crawl can still process many pages in parallel.
+# The default limit of 3 (stored in ptolemy_crawl_slots) protects the server from being
+# overwhelmed by multiple users starting crawls at the same time.
 DEFAULT_CONCURRENT_CRAWL_LIMIT = 3  # Max simultaneous crawl operations (protects server resources)
-crawl_semaphore: asyncio.Semaphore | None = None
-crawl_semaphore_limit: int | None = None
-crawl_semaphore_lock = asyncio.Lock()
 
-# Track active async crawl tasks for cancellation support
+# Legacy in-memory tracking for asyncio task references (needed for task.cancel())
+# The database tracks cancellation requests, but we still need local task references
+# to actually cancel running asyncio tasks within this process.
 active_crawl_tasks: dict[str, asyncio.Task] = {}
 
 
 
 
-async def _get_crawl_semaphore() -> asyncio.Semaphore:
-    global crawl_semaphore, crawl_semaphore_limit
+async def _acquire_crawl_slot(progress_id: str) -> bool:
+    """
+    Acquire a database-backed crawl slot for concurrency control.
 
+    Args:
+        progress_id: Unique identifier for the operation
+
+    Returns:
+        True if slot was acquired, False if all slots are in use
+    """
+    store = get_crawl_operation_store()
+    return await store.acquire_slot(progress_id)
+
+
+async def _release_crawl_slot(progress_id: str) -> None:
+    """
+    Release a database-backed crawl slot.
+
+    Args:
+        progress_id: Unique identifier for the operation
+    """
+    store = get_crawl_operation_store()
+    await store.release_slot(progress_id)
+
+
+async def _sync_slot_count() -> None:
+    """
+    Sync the database slot count with the configured CONCURRENT_CRAWL_LIMIT.
+    Called on server startup or when settings change.
+    """
     try:
         settings = await credential_service.get_credentials_by_category("rag_strategy")
         raw_limit = settings.get("CONCURRENT_CRAWL_LIMIT", str(DEFAULT_CONCURRENT_CRAWL_LIMIT))
         limit = int(raw_limit)
-    except Exception:
-        limit = DEFAULT_CONCURRENT_CRAWL_LIMIT
+        limit = max(1, min(10, limit))
 
-    limit = max(1, min(10, limit))
-
-    async with crawl_semaphore_lock:
-        if crawl_semaphore is None or crawl_semaphore_limit != limit:
-            crawl_semaphore = asyncio.Semaphore(limit)
-            crawl_semaphore_limit = limit
-        return crawl_semaphore
+        store = get_crawl_operation_store()
+        await store.set_slot_count(limit)
+        safe_logfire_info(f"Synced crawl slot count to {limit}")
+    except Exception as e:
+        safe_logfire_error(f"Failed to sync slot count | error={e}")
 
 
 async def _validate_provider_api_key(provider: str = None) -> None:
@@ -710,23 +734,34 @@ async def refresh_knowledge_item(source_id: str):
             "generate_summary": True,
         }
 
-        # Create a wrapped task that acquires the semaphore
-        async def _perform_refresh_with_semaphore():
+        # Create a wrapped task that acquires a DB slot
+        async def _perform_refresh_with_slot():
+            slot_acquired = False
             try:
-                semaphore = await _get_crawl_semaphore()
-                async with semaphore:
+                # Acquire database-backed slot for concurrency control
+                slot_acquired = await _acquire_crawl_slot(progress_id)
+                if not slot_acquired:
                     safe_logfire_info(
-                        f"Acquired crawl semaphore for refresh | source_id={source_id}"
+                        f"No crawl slots available for refresh | source_id={source_id} | progress_id={progress_id}"
                     )
-                    result = await crawl_service.orchestrate_crawl(request_dict)
+                    # Update tracker to show queued status
+                    from ..utils.progress.progress_tracker import ProgressTracker
+                    tracker = ProgressTracker(progress_id, operation_type="crawl")
+                    await tracker.error("Server busy - no crawl slots available. Please try again later.")
+                    return
 
-                    # Store the ACTUAL crawl task for proper cancellation
-                    crawl_task = result.get("task")
-                    if crawl_task:
-                        active_crawl_tasks[progress_id] = crawl_task
-                        safe_logfire_info(
-                            f"Stored actual refresh crawl task | progress_id={progress_id} | task_name={crawl_task.get_name()}"
-                        )
+                safe_logfire_info(
+                    f"Acquired crawl slot for refresh | source_id={source_id} | progress_id={progress_id}"
+                )
+                result = await crawl_service.orchestrate_crawl(request_dict)
+
+                # Store the ACTUAL crawl task for proper cancellation
+                crawl_task = result.get("task")
+                if crawl_task:
+                    active_crawl_tasks[progress_id] = crawl_task
+                    safe_logfire_info(
+                        f"Stored actual refresh crawl task | progress_id={progress_id} | task_name={crawl_task.get_name()}"
+                    )
             finally:
                 # Clean up task from registry when done (success or failure)
                 if progress_id in active_crawl_tasks:
@@ -734,9 +769,12 @@ async def refresh_knowledge_item(source_id: str):
                     safe_logfire_info(
                         f"Cleaned up refresh task from registry | progress_id={progress_id}"
                     )
+                # Release DB slot
+                if slot_acquired:
+                    await _release_crawl_slot(progress_id)
 
         # Start the wrapper task - we don't need to track it since we'll track the actual crawl task
-        asyncio.create_task(_perform_refresh_with_semaphore())
+        asyncio.create_task(_perform_refresh_with_slot())
 
         return {"progressId": progress_id, "message": f"Started refresh for {url}"}
 
@@ -830,88 +868,96 @@ async def _perform_crawl_with_progress(
     progress_id: str, request: KnowledgeItemRequest, tracker
 ):
     """Perform the actual crawl operation with progress tracking using service layer."""
-    # Acquire semaphore to limit concurrent crawls
-    semaphore = await _get_crawl_semaphore()
-    async with semaphore:
+    # Acquire database-backed slot for concurrency control
+    slot_acquired = await _acquire_crawl_slot(progress_id)
+    if not slot_acquired:
         safe_logfire_info(
-            f"Acquired crawl semaphore | progress_id={progress_id} | url={str(request.url)}"
+            f"No crawl slots available | progress_id={progress_id} | url={str(request.url)}"
         )
+        await tracker.error("Server busy - no crawl slots available. Please try again later.")
+        return
+
+    safe_logfire_info(
+        f"Acquired crawl slot | progress_id={progress_id} | url={str(request.url)}"
+    )
+    try:
+        safe_logfire_info(
+            f"Starting crawl with progress tracking | progress_id={progress_id} | url={str(request.url)}"
+        )
+
+        # Get crawler from CrawlerManager
         try:
-            safe_logfire_info(
-                f"Starting crawl with progress tracking | progress_id={progress_id} | url={str(request.url)}"
-            )
-
-            # Get crawler from CrawlerManager
-            try:
-                crawler = await get_crawler()
-                if crawler is None:
-                    raise Exception("Crawler not available - initialization may have failed")
-            except Exception as e:
-                safe_logfire_error(f"Failed to get crawler | error={str(e)}")
-                await tracker.error(f"Failed to initialize crawler: {str(e)}")
-                return
-
-            supabase_client = get_supabase_client()
-            orchestration_service = CrawlingService(crawler, supabase_client)
-            orchestration_service.set_progress_id(progress_id)
-
-            # Convert request to dict for service
-            request_dict = {
-                "url": str(request.url),
-                "knowledge_type": request.knowledge_type,
-                "tags": request.tags or [],
-                "max_depth": request.max_depth,
-                "extract_code_examples": request.extract_code_examples,
-                "generate_summary": True,
-            }
-
-            # Orchestrate the crawl - this returns immediately with task info including the actual task
-            result = await orchestration_service.orchestrate_crawl(request_dict)
-
-            # Store the ACTUAL crawl task for proper cancellation
-            crawl_task = result.get("task")
-            if crawl_task:
-                active_crawl_tasks[progress_id] = crawl_task
-                safe_logfire_info(
-                    f"Stored actual crawl task in active_crawl_tasks | progress_id={progress_id} | task_name={crawl_task.get_name()}"
-                )
-            else:
-                safe_logfire_error(f"No task returned from orchestrate_crawl | progress_id={progress_id}")
-
-            # The orchestration service now runs in background and handles all progress updates
-            safe_logfire_info(
-                f"Crawl task started | progress_id={progress_id} | task_id={result.get('task_id')}"
-            )
-        except asyncio.CancelledError:
-            safe_logfire_info(f"Crawl cancelled | progress_id={progress_id}")
-            raise
+            crawler = await get_crawler()
+            if crawler is None:
+                raise Exception("Crawler not available - initialization may have failed")
         except Exception as e:
-            error_message = f"Crawling failed: {str(e)}"
-            safe_logfire_error(
-                f"Crawl failed | progress_id={progress_id} | error={error_message} | exception_type={type(e).__name__}"
-            )
-            import traceback
+            safe_logfire_error(f"Failed to get crawler | error={str(e)}")
+            await tracker.error(f"Failed to initialize crawler: {str(e)}")
+            return
 
-            tb = traceback.format_exc()
-            # Ensure the error is visible in logs
-            logger.error(f"=== CRAWL ERROR FOR {progress_id} ===")
-            logger.error(f"Error: {error_message}")
-            logger.error(f"Exception Type: {type(e).__name__}")
-            logger.error(f"Traceback:\n{tb}")
-            logger.error("=== END CRAWL ERROR ===")
-            safe_logfire_error(f"Crawl exception traceback | traceback={tb}")
-            # Ensure clients see the failure
-            try:
-                await tracker.error(error_message)
-            except Exception:
-                pass
-        finally:
-            # Clean up task from registry when done (success or failure)
-            if progress_id in active_crawl_tasks:
-                del active_crawl_tasks[progress_id]
-                safe_logfire_info(
-                    f"Cleaned up crawl task from registry | progress_id={progress_id}"
-                )
+        supabase_client = get_supabase_client()
+        orchestration_service = CrawlingService(crawler, supabase_client)
+        orchestration_service.set_progress_id(progress_id)
+
+        # Convert request to dict for service
+        request_dict = {
+            "url": str(request.url),
+            "knowledge_type": request.knowledge_type,
+            "tags": request.tags or [],
+            "max_depth": request.max_depth,
+            "extract_code_examples": request.extract_code_examples,
+            "generate_summary": True,
+        }
+
+        # Orchestrate the crawl - this returns immediately with task info including the actual task
+        result = await orchestration_service.orchestrate_crawl(request_dict)
+
+        # Store the ACTUAL crawl task for proper cancellation
+        crawl_task = result.get("task")
+        if crawl_task:
+            active_crawl_tasks[progress_id] = crawl_task
+            safe_logfire_info(
+                f"Stored actual crawl task in active_crawl_tasks | progress_id={progress_id} | task_name={crawl_task.get_name()}"
+            )
+        else:
+            safe_logfire_error(f"No task returned from orchestrate_crawl | progress_id={progress_id}")
+
+        # The orchestration service now runs in background and handles all progress updates
+        safe_logfire_info(
+            f"Crawl task started | progress_id={progress_id} | task_id={result.get('task_id')}"
+        )
+    except asyncio.CancelledError:
+        safe_logfire_info(f"Crawl cancelled | progress_id={progress_id}")
+        raise
+    except Exception as e:
+        error_message = f"Crawling failed: {str(e)}"
+        safe_logfire_error(
+            f"Crawl failed | progress_id={progress_id} | error={error_message} | exception_type={type(e).__name__}"
+        )
+        import traceback
+
+        tb = traceback.format_exc()
+        # Ensure the error is visible in logs
+        logger.error(f"=== CRAWL ERROR FOR {progress_id} ===")
+        logger.error(f"Error: {error_message}")
+        logger.error(f"Exception Type: {type(e).__name__}")
+        logger.error(f"Traceback:\n{tb}")
+        logger.error("=== END CRAWL ERROR ===")
+        safe_logfire_error(f"Crawl exception traceback | traceback={tb}")
+        # Ensure clients see the failure
+        try:
+            await tracker.error(error_message)
+        except Exception:
+            pass
+    finally:
+        # Clean up task from registry when done (success or failure)
+        if progress_id in active_crawl_tasks:
+            del active_crawl_tasks[progress_id]
+            safe_logfire_info(
+                f"Cleaned up crawl task from registry | progress_id={progress_id}"
+            )
+        # Release DB slot
+        await _release_crawl_slot(progress_id)
 
 
 @router.post("/documents/upload")
@@ -1310,17 +1356,24 @@ async def stop_crawl_task(progress_id: str):
     try:
         from ..services.crawling import get_active_orchestration, unregister_orchestration
 
-
         safe_logfire_info(f"Stop crawl requested | progress_id={progress_id}")
 
         found = False
-        # Step 1: Cancel the orchestration service
+
+        # Step 0: Set cancellation flag in database (for multi-worker visibility)
+        store = get_crawl_operation_store()
+        db_cancelled = await store.request_cancellation(progress_id)
+        if db_cancelled:
+            found = True
+            safe_logfire_info(f"Database cancellation flag set | progress_id={progress_id}")
+
+        # Step 1: Cancel the orchestration service (in-process)
         orchestration = await get_active_orchestration(progress_id)
         if orchestration:
             orchestration.cancel()
             found = True
 
-        # Step 2: Cancel the asyncio task
+        # Step 2: Cancel the asyncio task (in-process)
         if progress_id in active_crawl_tasks:
             task = active_crawl_tasks[progress_id]
             if not task.done():
@@ -1335,7 +1388,10 @@ async def stop_crawl_task(progress_id: str):
         # Step 3: Remove from active orchestrations registry
         await unregister_orchestration(progress_id)
 
-        # Step 4: Update progress tracker to reflect cancellation (only if we found and cancelled something)
+        # Step 4: Mark operation as cancelled in database and release slot
+        await store.mark_cancelled(progress_id)
+
+        # Step 5: Update progress tracker to reflect cancellation (only if we found and cancelled something)
         if found:
             try:
                 from ..utils.progress.progress_tracker import ProgressTracker

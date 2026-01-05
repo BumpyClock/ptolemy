@@ -156,13 +156,33 @@ class CrawlingService:
         safe_logfire_info(f"Crawl operation cancelled | progress_id={self.progress_id}")
 
     def is_cancelled(self) -> bool:
-        """Check if the crawl operation has been cancelled."""
+        """Check if the crawl operation has been cancelled (local flag only)."""
         return self._cancelled
 
     def _check_cancellation(self):
-        """Check if cancelled and raise an exception if so."""
+        """Check if cancelled and raise an exception if so (sync - local flag only)."""
         if self._cancelled:
             raise asyncio.CancelledError("Crawl operation was cancelled by user")
+
+    async def _check_db_cancellation(self):
+        """
+        Check database cancellation flag and update local state.
+
+        Call this at key transition points to pick up cancellation requests
+        from other workers or the API.
+        """
+        if not self.progress_id:
+            return
+
+        try:
+            from ..crawl_operation_store import get_crawl_operation_store
+            store = get_crawl_operation_store()
+            if await store.is_cancelled(self.progress_id):
+                self._cancelled = True
+                safe_logfire_info(f"Database cancellation detected | progress_id={self.progress_id}")
+        except Exception as e:
+            # Don't fail the crawl if we can't check the database
+            safe_logfire_error(f"Failed to check DB cancellation | error={e} | progress_id={self.progress_id}")
 
     async def _create_crawl_progress_callback(
         self, base_status: str
@@ -385,7 +405,8 @@ class CrawlingService:
                 "starting", 100, f"Starting crawl of {url}", current_url=url
             )
 
-            # Check for cancellation before proceeding
+            # Check for cancellation before proceeding (both local and database)
+            await self._check_db_cancellation()
             self._check_cancellation()
 
             # Discovery phase - find the single best related file
@@ -496,7 +517,8 @@ class CrawlingService:
                     crawl_type=crawl_type
                 )
 
-            # Check for cancellation after crawling
+            # Check for cancellation after crawling (both local and database)
+            await self._check_db_cancellation()
             self._check_cancellation()
 
             # Send heartbeat after potentially long crawl operation
@@ -509,6 +531,7 @@ class CrawlingService:
             await update_mapped_progress("processing", 50, "Processing crawled content")
 
             # Check for cancellation before document processing
+            await self._check_db_cancellation()
             self._check_cancellation()
 
             # Calculate total work units for accurate progress tracking
@@ -576,7 +599,8 @@ class CrawlingService:
                     f"Updated progress tracker with source_id | progress_id={self.progress_id} | source_id={storage_results['source_id']}"
                 )
 
-            # Check for cancellation after document storage
+            # Check for cancellation after document storage (both local and database)
+            await self._check_db_cancellation()
             self._check_cancellation()
 
             # Send heartbeat after document storage
@@ -597,6 +621,7 @@ class CrawlingService:
             code_examples_count = 0
             if request.get("extract_code_examples", True) and actual_chunks_stored > 0:
                 # Check for cancellation before starting code extraction
+                await self._check_db_cancellation()
                 self._check_cancellation()
 
                 await update_mapped_progress("code_extraction", 0, "Starting code extraction...")
@@ -665,7 +690,8 @@ class CrawlingService:
                             total_pages=total_pages,
                         )
 
-                # Check for cancellation after code extraction
+                # Check for cancellation after code extraction (both local and database)
+                await self._check_db_cancellation()
                 self._check_cancellation()
 
                 # Send heartbeat after code extraction
