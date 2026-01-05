@@ -220,3 +220,101 @@ class TestURLCanonicalization:
         relative_path = "../documents/file.txt"
         relative_id = handler.generate_unique_source_id(relative_path)
         assert len(relative_id) == 16, "Relative path should generate valid ID"
+
+
+class TestCanonicalizeUrl:
+    """Test the canonicalize_url function directly."""
+
+    def test_basic_normalization(self):
+        """Test basic URL normalization."""
+        result = URLHandler.canonicalize_url("HTTPS://Example.COM:443/path/?b=2&a=1")
+        assert result == "https://example.com/path?a=1&b=2"
+
+    def test_tracking_params_removed(self):
+        """Test that tracking parameters are removed."""
+        result = URLHandler.canonicalize_url(
+            "https://example.com/page?keep=yes&utm_source=google&utm_campaign=test"
+        )
+        assert result == "https://example.com/page?keep=yes"
+
+    def test_fragment_dropped_by_default(self):
+        """Test that fragments are dropped by default."""
+        result = URLHandler.canonicalize_url("https://example.com/page#section")
+        assert result == "https://example.com/page"
+
+    def test_fragment_preserved_when_requested(self):
+        """Test that fragments can be preserved."""
+        result = URLHandler.canonicalize_url(
+            "https://example.com/page#section", preserve_fragment=True
+        )
+        assert result == "https://example.com/page#section"
+
+    def test_trailing_slash_removed(self):
+        """Test trailing slash handling."""
+        result = URLHandler.canonicalize_url("https://example.com/path/")
+        assert result == "https://example.com/path"
+
+        # Root path keeps slash
+        result = URLHandler.canonicalize_url("https://example.com/")
+        assert result == "https://example.com/"
+
+    def test_default_port_removed(self):
+        """Test default port removal."""
+        result = URLHandler.canonicalize_url("http://example.com:80/page")
+        assert result == "http://example.com/page"
+
+        result = URLHandler.canonicalize_url("https://example.com:443/page")
+        assert result == "https://example.com/page"
+
+        # Non-default port kept
+        result = URLHandler.canonicalize_url("https://example.com:8080/page")
+        assert result == "https://example.com:8080/page"
+
+
+class TestCanonicalizePageUrl:
+    """Test the canonicalize_page_url function for page deduplication."""
+
+    def test_regular_url_drops_fragment(self):
+        """Test that regular URLs drop fragments."""
+        result = URLHandler.canonicalize_page_url("https://docs.com/guide#section")
+        assert result == "https://docs.com/guide"
+
+    def test_llms_full_preserves_fragment(self):
+        """Test that llms-full.txt URLs preserve fragments."""
+        result = URLHandler.canonicalize_page_url(
+            "https://docs.com/llms-full.txt#Authentication"
+        )
+        assert result == "https://docs.com/llms-full.txt#Authentication"
+
+    def test_llms_txt_preserves_fragment(self):
+        """Test that llms.txt URLs preserve fragments."""
+        result = URLHandler.canonicalize_page_url("https://docs.com/llms.txt#API")
+        assert result == "https://docs.com/llms.txt#API"
+
+    def test_llms_directory_file_preserves_fragment(self):
+        """Test that files in /llms/ directory preserve fragments."""
+        result = URLHandler.canonicalize_page_url(
+            "https://docs.com/llms/guides.txt#Getting-Started"
+        )
+        assert result == "https://docs.com/llms/guides.txt#Getting-Started"
+
+    def test_llms_full_without_fragment(self):
+        """Test llms-full URL without fragment."""
+        result = URLHandler.canonicalize_page_url("https://docs.com/llms-full.txt")
+        assert result == "https://docs.com/llms-full.txt"
+
+    def test_llms_full_with_tracking_params(self):
+        """Test llms-full URL with tracking params removed but fragment kept."""
+        result = URLHandler.canonicalize_page_url(
+            "https://docs.com/llms-full.txt?utm_source=test#Auth"
+        )
+        assert result == "https://docs.com/llms-full.txt#Auth"
+
+    def test_case_insensitive_llms_detection(self):
+        """Test that llms detection is case-insensitive."""
+        # llms-full.txt detection should be case-insensitive
+        result = URLHandler.canonicalize_page_url(
+            "https://DOCS.COM/LLMS-FULL.TXT#Section"
+        )
+        # URL gets lowercased, fragment preserved
+        assert result == "https://docs.com/LLMS-FULL.TXT#Section"

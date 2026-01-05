@@ -82,10 +82,24 @@ iteration. Do exactly one meaningful task per loop, then stop.
 - `migration/9_add_topics_and_canonical_dedupe.sql` - incremental migration
 - `migration/complete_setup.sql` - updated Section 4.7 for fresh installs
 
-## 2) Canonicalization Rules
-- [ ] Implement canonical URL helper (reuse generate_unique_source_id rules).
-- [ ] Preserve fragments for llms-full section URLs to avoid collapsing anchors.
+## 2) Canonicalization Rules ✅ COMPLETE
+- [x] Implement canonical URL helper (reuse generate_unique_source_id rules).
+- [x] Preserve fragments for llms-full section URLs to avoid collapsing anchors.
 - [ ] Ensure canonicalization is applied consistently in crawl + backfill.
+
+**Implementation:**
+- `URLHandler.canonicalize_url(url, preserve_fragment=False)` - base canonicalization function
+- `URLHandler.canonicalize_page_url(url)` - auto-detects llms-full URLs and preserves fragments
+- Refactored `generate_unique_source_id()` to use shared `canonicalize_url()`
+- Added 13 new unit tests in `tests/test_url_canonicalization.py`
+
+**Canonicalization rules applied:**
+- Lowercase scheme and netloc
+- Remove default ports (:80 for http, :443 for https)
+- Remove trailing slashes (except root path)
+- Remove tracking params (utm_*, gclid, fbclid, ref, source)
+- Sort query parameters alphabetically
+- Drop fragments (except for llms-full.txt/llms.txt/llms/ URLs)
 
 ## 3) Ingestion Pipeline Updates (Page + Chunk Dedupe)
 - [ ] During crawl, compute `canonical_url` for each page.

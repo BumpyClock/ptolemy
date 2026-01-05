@@ -7,7 +7,7 @@ Handles URL transformations and validations.
 import hashlib
 import re
 from typing import List, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from ....config.logfire_config import get_logger
 
@@ -16,6 +16,101 @@ logger = get_logger(__name__)
 
 class URLHandler:
     """Helper class for URL operations."""
+
+    # Tracking parameters to remove during URL canonicalization
+    TRACKING_PARAMS = {
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+        "gclid", "fbclid", "ref", "source"
+    }
+
+    @staticmethod
+    def canonicalize_url(url: str, preserve_fragment: bool = False) -> str:
+        """
+        Canonicalize a URL for consistent deduplication.
+
+        Applies the following normalization rules:
+        - Lowercase scheme and netloc
+        - Remove default ports (:80 for http, :443 for https)
+        - Remove trailing slashes (except for root path)
+        - Remove tracking parameters (utm_*, gclid, fbclid, ref, source)
+        - Sort remaining query parameters alphabetically
+        - Optionally preserve or drop URL fragments
+
+        Args:
+            url: The URL to canonicalize
+            preserve_fragment: If True, preserve the URL fragment (anchor).
+                             Use True for llms-full section URLs where fragments
+                             identify distinct content sections.
+
+        Returns:
+            The canonicalized URL string
+
+        Example:
+            >>> URLHandler.canonicalize_url("HTTPS://Example.COM:443/path/?b=2&a=1&utm_source=x")
+            "https://example.com/path?a=1&b=2"
+            >>> URLHandler.canonicalize_url("https://docs.com/llms-full.txt#auth", preserve_fragment=True)
+            "https://docs.com/llms-full.txt#auth"
+        """
+        try:
+            parsed = urlparse(url.strip())
+
+            # Normalize scheme and netloc to lowercase
+            scheme = (parsed.scheme or "").lower()
+            netloc = (parsed.netloc or "").lower()
+
+            # Remove default ports
+            if netloc.endswith(":80") and scheme == "http":
+                netloc = netloc[:-3]
+            if netloc.endswith(":443") and scheme == "https":
+                netloc = netloc[:-4]
+
+            # Normalize path (remove trailing slash except for root)
+            path = parsed.path or "/"
+            if path.endswith("/") and len(path) > 1:
+                path = path.rstrip("/")
+
+            # Remove tracking parameters and sort remaining
+            query_items = [
+                (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+                if k not in URLHandler.TRACKING_PARAMS
+            ]
+            query = urlencode(sorted(query_items))
+
+            # Handle fragment based on preserve_fragment flag
+            fragment = parsed.fragment if preserve_fragment else ""
+
+            # Reconstruct canonical URL
+            return urlunparse((scheme, netloc, path, "", query, fragment))
+
+        except Exception as e:
+            logger.error(f"Error canonicalizing URL {url}: {e}", exc_info=True)
+            # Return stripped URL as fallback
+            return url.strip()
+
+    @staticmethod
+    def canonicalize_page_url(url: str) -> str:
+        """
+        Canonicalize a page URL for deduplication, preserving fragments for llms-full sections.
+
+        This is the primary function to use when canonicalizing page URLs during crawling.
+        It automatically detects llms-full.txt URLs and preserves their fragments,
+        since fragments identify distinct H1 sections in llms-full content.
+
+        Args:
+            url: The page URL to canonicalize
+
+        Returns:
+            The canonicalized URL, with fragment preserved for llms-full URLs
+
+        Example:
+            >>> URLHandler.canonicalize_page_url("https://docs.com/page?utm_source=x#section")
+            "https://docs.com/page"
+            >>> URLHandler.canonicalize_page_url("https://docs.com/llms-full.txt#Authentication")
+            "https://docs.com/llms-full.txt#Authentication"
+        """
+        # Preserve fragments for llms-full URLs (they represent distinct H1 sections)
+        preserve_fragment = URLHandler.is_llms_variant(url)
+        return URLHandler.canonicalize_url(url, preserve_fragment=preserve_fragment)
 
     @staticmethod
     def is_sitemap(url: str) -> bool:
@@ -216,7 +311,7 @@ class URLHandler:
         This creates a 16-character hash that is extremely unlikely to collide
         for distinct canonical URLs, solving race condition issues when multiple crawls
         target the same domain.
-        
+
         Uses 16-char SHA256 prefix (64 bits) which provides
         ~18 quintillion unique values. Collision probability
         is negligible for realistic usage (<1M sources).
@@ -228,39 +323,8 @@ class URLHandler:
             A 16-character hexadecimal hash string
         """
         try:
-            from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-
-            # Canonicalize URL for consistent hashing
-            parsed = urlparse(url.strip())
-
-            # Normalize scheme and netloc to lowercase
-            scheme = (parsed.scheme or "").lower()
-            netloc = (parsed.netloc or "").lower()
-
-            # Remove default ports
-            if netloc.endswith(":80") and scheme == "http":
-                netloc = netloc[:-3]
-            if netloc.endswith(":443") and scheme == "https":
-                netloc = netloc[:-4]
-
-            # Normalize path (remove trailing slash except for root)
-            path = parsed.path or "/"
-            if path.endswith("/") and len(path) > 1:
-                path = path.rstrip("/")
-
-            # Remove common tracking parameters and sort remaining
-            tracking_params = {
-                "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-                "gclid", "fbclid", "ref", "source"
-            }
-            query_items = [
-                (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
-                if k not in tracking_params
-            ]
-            query = urlencode(sorted(query_items))
-
-            # Reconstruct canonical URL (fragment is dropped)
-            canonical = urlunparse((scheme, netloc, path, "", query, ""))
+            # Use shared canonicalization logic (fragments always dropped for source IDs)
+            canonical = URLHandler.canonicalize_url(url, preserve_fragment=False)
 
             # Generate SHA256 hash and take first 16 characters
             return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
