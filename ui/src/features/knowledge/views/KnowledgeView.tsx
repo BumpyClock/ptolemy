@@ -15,6 +15,7 @@ import type { KnowledgeItem, KnowledgeItemsFilter } from "../types";
 
 const INITIAL_PAGE = 1;
 const PAGE_SIZE = 24;
+const KNOWLEDGE_RESET_EVENT = "knowledge:reset";
 
 export const KnowledgeView = () => {
   // View state
@@ -24,6 +25,7 @@ export const KnowledgeView = () => {
   const [page, setPage] = useState(INITIAL_PAGE);
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRef = useRef(false);
 
   const [inspectorItem, setInspectorItem] = useState<KnowledgeItem | null>(null);
   const [inspectorInitialTab, setInspectorInitialTab] = useState<"documents" | "code">("documents");
@@ -116,6 +118,22 @@ export const KnowledgeView = () => {
     });
   }, [data?.items, page]);
 
+  useEffect(() => {
+    const handleReset = () => {
+      setPage(INITIAL_PAGE);
+      setItems([]);
+    };
+
+    window.addEventListener(KNOWLEDGE_RESET_EVENT, handleReset);
+    return () => window.removeEventListener(KNOWLEDGE_RESET_EVENT, handleReset);
+  }, []);
+
+  useEffect(() => {
+    if (!isFetching) {
+      loadingMoreRef.current = false;
+    }
+  }, [isFetching]);
+
   const handleViewDocument = (sourceId: string) => {
     // Find the item and open inspector to documents tab
     const item = knowledgeItems.find((k) => k.source_id === sourceId);
@@ -157,9 +175,9 @@ export const KnowledgeView = () => {
   };
 
   const handleLoadMore = () => {
-    if (hasMorePages && !isFetching) {
-      setPage((prev) => prev + 1);
-    }
+    if (!hasMorePages || isFetching || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setPage((prev) => prev + 1);
   };
 
   useEffect(() => {

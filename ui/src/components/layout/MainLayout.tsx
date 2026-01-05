@@ -74,6 +74,7 @@ export function MainLayout({ children, className }: MainLayoutProps) {
 
   const handleAddKnowledgeSuccess = () => {
     queryClient.invalidateQueries({ queryKey: knowledgeKeys.summariesPrefix() });
+    window.dispatchEvent(new Event("knowledge:reset"));
   };
 
   return (
