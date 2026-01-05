@@ -56,8 +56,9 @@ const AppContent = () => {
       onReconnected: () => {
         setDisconnectScreenActive(false);
         setDisconnectScreenDismissed(false);
-        // Refresh the page to ensure all data is fresh
-        window.location.reload();
+        // Invalidate all queries to refresh data without full page reload
+        // This preserves form state and other local state
+        queryClient.invalidateQueries();
       }
     });
 
