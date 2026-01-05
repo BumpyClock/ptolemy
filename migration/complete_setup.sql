@@ -628,6 +628,97 @@ $$;
 COMMENT ON FUNCTION ptolemy_update_source IS 'Atomically updates source title and/or metadata fields';
 
 -- =====================================================
+-- SECTION 4.5B: SOURCE INFERENCE FULL-TEXT SEARCH
+-- =====================================================
+
+-- Add tsvector column for full-text search
+ALTER TABLE ptolemy_sources
+ADD COLUMN IF NOT EXISTS search_vector tsvector;
+
+-- Create GIN index for fast full-text search
+CREATE INDEX IF NOT EXISTS idx_ptolemy_sources_search_vector
+ON ptolemy_sources USING GIN (search_vector);
+
+-- Function to build the search vector with weights
+CREATE OR REPLACE FUNCTION ptolemy_sources_search_vector_update()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    tags_text TEXT;
+BEGIN
+    tags_text := COALESCE(
+        (SELECT string_agg(elem::text, ' ')
+         FROM jsonb_array_elements_text(COALESCE(NEW.metadata->'tags', '[]'::jsonb)) AS elem),
+        ''
+    );
+
+    NEW.search_vector :=
+        setweight(to_tsvector('english', COALESCE(NEW.title, '')), 'A') ||
+        setweight(to_tsvector('english', tags_text), 'B') ||
+        setweight(to_tsvector('english', COALESCE(NEW.source_id, '')), 'C') ||
+        setweight(to_tsvector('english', COALESCE(NEW.summary, '')), 'D');
+
+    RETURN NEW;
+END;
+$$;
+
+-- Create trigger to auto-update search_vector
+DROP TRIGGER IF EXISTS ptolemy_sources_search_vector_trigger ON ptolemy_sources;
+CREATE TRIGGER ptolemy_sources_search_vector_trigger
+    BEFORE INSERT OR UPDATE OF title, summary, metadata, source_id
+    ON ptolemy_sources
+    FOR EACH ROW
+    EXECUTE FUNCTION ptolemy_sources_search_vector_update();
+
+-- Function to infer source_id from a query using full-text search
+CREATE OR REPLACE FUNCTION ptolemy_infer_source_id(p_query TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_query tsquery;
+    v_result RECORD;
+    v_second_score FLOAT;
+BEGIN
+    v_query := plainto_tsquery('english', p_query);
+
+    IF v_query IS NULL OR v_query::text = '' THEN
+        RETURN NULL;
+    END IF;
+
+    FOR v_result IN
+        SELECT
+            source_id,
+            ts_rank('{0.1, 0.3, 0.3, 0.4}', search_vector, v_query) AS score
+        FROM ptolemy_sources
+        WHERE search_vector @@ v_query
+        ORDER BY score DESC
+        LIMIT 2
+    LOOP
+        IF v_result.score < 0.05 THEN
+            RETURN NULL;
+        END IF;
+
+        IF v_second_score IS NULL THEN
+            v_second_score := 0;
+        END IF;
+
+        IF v_second_score > 0 AND v_result.score < v_second_score * 1.5 THEN
+            RETURN NULL;
+        END IF;
+
+        RETURN v_result.source_id;
+    END LOOP;
+
+    RETURN NULL;
+END;
+$$;
+
+COMMENT ON FUNCTION ptolemy_infer_source_id IS 'Infer the best matching source_id for a query using full-text search with weighted ranking';
+
+-- =====================================================
 -- SECTION 4.6: MULTI-DIMENSIONAL EMBEDDING HELPER FUNCTIONS
 -- =====================================================
 
@@ -1349,7 +1440,8 @@ VALUES
   ('0.1.0', '4_add_summary_count_rpcs.sql'),
   ('0.1.0', '5_add_sources_search_indexes.sql'),
   ('0.1.0', '6_add_crawl_operations_table.sql'),
-  ('0.1.0', '7_add_atomic_metadata_update.sql')
+  ('0.1.0', '7_add_atomic_metadata_update.sql'),
+  ('0.1.0', '8_add_source_inference_search.sql')
 ON CONFLICT (version, migration_name) DO NOTHING;
 
 -- Enable Row Level Security on migrations table

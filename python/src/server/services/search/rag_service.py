@@ -277,6 +277,41 @@ class RAGService:
         return score
 
     def _infer_source_id(self, query: str) -> str | None:
+        """
+        Infer the best matching source_id for a query using database full-text search.
+
+        Uses PostgreSQL tsvector with weighted ranking for efficient scoring:
+        - Title matches get highest weight
+        - Tags and source_id get medium weight
+        - Summary matches get lowest weight
+
+        Falls back to Python-based scoring if database function is not available.
+        """
+        if not query or not query.strip():
+            return None
+
+        try:
+            # Use database function for efficient full-text search
+            result = self.supabase_client.rpc(
+                "ptolemy_infer_source_id",
+                {"p_query": query}
+            ).execute()
+
+            # RPC returns the source_id directly or None
+            if result.data is not None:
+                return result.data
+
+            return None
+
+        except Exception as e:
+            # Log error and fall back to Python-based scoring
+            logger.warning(f"Database source inference failed, falling back to Python: {e}")
+            return self._infer_source_id_fallback(query)
+
+    def _infer_source_id_fallback(self, query: str) -> str | None:
+        """
+        Fallback Python-based source inference when database function is unavailable.
+        """
         tokens = self._tokenize_query(query)
         if not tokens:
             return None
