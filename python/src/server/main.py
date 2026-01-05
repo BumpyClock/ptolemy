@@ -27,6 +27,7 @@ from .api_routes.openrouter_api import router as openrouter_router
 from .api_routes.pages_api import router as pages_router
 from .api_routes.progress_api import router as progress_router
 from .api_routes.providers_api import router as providers_router
+from .api_routes.topics_api import router as topics_router
 from .api_routes.version_api import router as version_router
 
 # Import modular API routers
@@ -195,6 +196,7 @@ app.include_router(mcp_router)
 # app.include_router(mcp_client_router)  # Removed - not part of new architecture
 app.include_router(knowledge_router)
 app.include_router(pages_router)
+app.include_router(topics_router)
 app.include_router(ollama_router)
 app.include_router(openrouter_router)
 app.include_router(progress_router)

@@ -13,8 +13,7 @@ iteration. Do exactly one meaningful task per loop, then stop.
 - Otherwise: Build mode.
 
 ## Planning mode (one task, then stop)
-- Use subagents (skip subagents if you're codex CLI) to scan specs and code for gaps, TODOs, placeholders, and
-  missing behavior.
+- Use subagents (skip subagents if you're codex CLI) to scan specs and code for gaps, TODOs, placeholders, and missing behavior.
 - Update @fix_plan.md and .ai_agents/specs/merge_topics.md  with a prioritized bullet list and remove completed items.
 - If a spec is missing for a needed feature, write it in @specs/*.
 
@@ -22,6 +21,8 @@ iteration. Do exactly one meaningful task per loop, then stop.
 
 1. Do not assume missing. Before changing code, search to confirm it is not
    already implemented. Re-check if search is ambiguous or incomplete.
+   
+2. Use a subagent for each iteration.
 3. Use subagents to keep primary context small: many for search/analysis, only one for build/tests.
 4. Full implementations only. No placeholders or stubs.
 5. TDD: for behavior changes, write a failing test first, then implement. If a test is not applicable, explain why in the loop output.
@@ -114,16 +115,25 @@ iteration. Do exactly one meaningful task per loop, then stop.
   - Falls back to URL deletion for legacy chunks
   - Chunks now include `canonical_url` field
 
-## 4) Topic UX + API
-- [ ] Add API endpoints:
-  - [ ] `GET /api/topics` (list)
-  - [ ] `POST /api/topics` (create)
-  - [ ] `GET /api/topics/{id}/sources`
-  - [ ] `PUT /api/topics/{id}/sources` (move source between topics)
-  - [ ] `GET /api/topics/{id}/pages` (deduped)
+## 4) Topic UX + API ✅ API COMPLETE (UI pending)
+- [x] Add API endpoints:
+  - [x] `GET /api/topics` (list)
+  - [x] `POST /api/topics` (create)
+  - [x] `GET /api/topics/{topic_id}` (get single)
+  - [x] `PUT /api/topics/{topic_id}` (update)
+  - [x] `DELETE /api/topics/{topic_id}` (delete)
+  - [x] `GET /api/topics/{id}/sources`
+  - [x] `PUT /api/topics/{id}/sources` (move source between topics)
+  - [x] `GET /api/topics/{id}/pages` (deduped)
 - [ ] Update add-knowledge flow to select/create Topic (typeahead + create).
-- [ ] Default existing sources to a topic (source name or “Uncategorized”).
+- [ ] Default existing sources to a topic (source name or "Uncategorized").
 - [ ] Add optional Related Topics UI (soft relationships only).
+
+**Implementation:**
+- `api_routes/topics_api.py` - Full CRUD API with Pydantic models
+- `services/topics/topic_service.py` - Business logic following tuple[bool, dict] pattern
+- Registered in `main.py`
+- Note: Requires migration 9 to be applied before use
 
 ## 5) Query / Retrieval Updates
 - [ ] Topic pages list: topic_id → source_ids → page_ids via `ptolemy_page_sources`.
