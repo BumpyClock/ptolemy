@@ -189,6 +189,8 @@ CREATE TABLE IF NOT EXISTS ptolemy_sources (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_ptolemy_sources_title ON ptolemy_sources(title);
+CREATE INDEX IF NOT EXISTS idx_ptolemy_sources_title_trgm ON ptolemy_sources USING GIN (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_ptolemy_sources_summary_trgm ON ptolemy_sources USING GIN (summary gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_ptolemy_sources_url ON ptolemy_sources(source_url);
 CREATE INDEX IF NOT EXISTS idx_ptolemy_sources_display_name ON ptolemy_sources(source_display_name);
 CREATE INDEX IF NOT EXISTS idx_ptolemy_sources_metadata ON ptolemy_sources USING GIN(metadata);
@@ -1010,6 +1012,28 @@ BEGIN
     RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION ptolemy_count_crawled_pages_by_source(source_ids text[])
+RETURNS TABLE (source_id text, count bigint)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT source_id, COUNT(*)::bigint AS count
+    FROM ptolemy_crawled_pages
+    WHERE source_id = ANY(source_ids)
+    GROUP BY source_id;
+$$;
+
+CREATE OR REPLACE FUNCTION ptolemy_count_code_examples_by_source(source_ids text[])
+RETURNS TABLE (source_id text, count bigint)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT source_id, COUNT(*)::bigint AS count
+    FROM ptolemy_code_examples
+    WHERE source_id = ANY(source_ids)
+    GROUP BY source_id;
+$$;
 
 -- Add comments to document the soft delete fields
 COMMENT ON COLUMN ptolemy_tasks.assignee IS 'The agent or user assigned to this task. Can be any valid agent name or "User"';

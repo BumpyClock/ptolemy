@@ -93,36 +93,28 @@ class KnowledgeSummaryService:
             result = query.execute()
             sources = result.data if result.data else []
             
-            # Get source IDs for batch operations
             source_ids = [s["source_id"] for s in sources]
-            
-            # Batch fetch counts only (no content!)
+
             summaries = []
-            
+
             if source_ids:
-                # Get document counts in a single query
                 doc_counts = await self._get_document_counts_batch(source_ids)
-                
-                # Get code example counts in a single query
                 code_counts = await self._get_code_example_counts_batch(source_ids)
+                source_urls = {
+                    source["source_id"]: source.get("source_url")
+                    for source in sources
+                    if source.get("source_url")
+                }
+                missing_source_ids = [source_id for source_id in source_ids if source_id not in source_urls]
+                first_urls = await self._get_first_urls_batch(missing_source_ids) if missing_source_ids else {}
                 
-                # Get first URLs in a single query
-                first_urls = await self._get_first_urls_batch(source_ids)
-                
-                # Build summaries
                 for source in sources:
                     source_id = source["source_id"]
                     metadata = source.get("metadata", {})
                     
-                    # Use the original source_url from the source record (the URL the user entered)
-                    # Fall back to first crawled page URL, then to source:// format as last resort
-                    source_url = source.get("source_url")
-                    if source_url:
-                        first_url = source_url
-                    else:
-                        first_url = first_urls.get(source_id, f"source://{source_id}")
+                    source_url = source_urls.get(source_id) or first_urls.get(source_id) or f"source://{source_id}"
                     
-                    source_type = metadata.get("source_type", "file" if first_url.startswith("file://") else "url")
+                    source_type = metadata.get("source_type", "file" if source_url.startswith("file://") else "url")
                     
                     # Extract knowledge_type - check metadata first, otherwise default based on source content
                     # The metadata should always have it if it was crawled properly
@@ -136,7 +128,7 @@ class KnowledgeSummaryService:
                     summary = {
                         "source_id": source_id,
                         "title": source.get("title", source.get("summary", "Untitled")),
-                        "url": first_url,
+                        "url": source_url,
                         "status": "active",  # Always active for now
                         "document_count": doc_counts.get(source_id, 0),
                         "code_examples_count": code_counts.get(source_id, 0),
@@ -175,19 +167,16 @@ class KnowledgeSummaryService:
             Dict mapping source_id to document count
         """
         try:
-            # Use a raw SQL query for efficient counting
-            # Group by source_id and count
             counts = {}
+            if not source_ids:
+                return counts
             
-            # For now, use individual queries but optimize later with raw SQL
-            for source_id in source_ids:
-                result = (
-                    self.supabase.from_("ptolemy_crawled_pages")
-                    .select("id", count="exact", head=True)
-                    .eq("source_id", source_id)
-                    .execute()
-                )
-                counts[source_id] = result.count if hasattr(result, "count") else 0
+            response = (
+                self.supabase.rpc("ptolemy_count_crawled_pages_by_source", {"source_ids": source_ids})
+                .execute()
+            )
+            for row in response.data or []:
+                counts[row["source_id"]] = int(row.get("count", 0))
             
             return counts
             
@@ -207,16 +196,15 @@ class KnowledgeSummaryService:
         """
         try:
             counts = {}
+            if not source_ids:
+                return counts
             
-            # For now, use individual queries but can optimize with raw SQL later
-            for source_id in source_ids:
-                result = (
-                    self.supabase.from_("ptolemy_code_examples")
-                    .select("id", count="exact", head=True)
-                    .eq("source_id", source_id)
-                    .execute()
-                )
-                counts[source_id] = result.count if hasattr(result, "count") else 0
+            response = (
+                self.supabase.rpc("ptolemy_count_code_examples_by_source", {"source_ids": source_ids})
+                .execute()
+            )
+            for row in response.data or []:
+                counts[row["source_id"]] = int(row.get("count", 0))
             
             return counts
             

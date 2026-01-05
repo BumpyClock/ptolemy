@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { useToast } from "@/features/shared/hooks/useToast";
 import { FeaturesSection } from "@/components/settings/FeaturesSection";
 import { APIKeysSection } from "@/components/settings/APIKeysSection";
@@ -90,94 +91,111 @@ export const SettingsPage = () => {
         <h1 className="text-2xl font-semibold">Settings</h1>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>General</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <FeaturesSection />
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="general">
+        <TabsList className="w-full flex-wrap justify-start gap-1">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="mcp">MCP</TabsTrigger>
+          <TabsTrigger value="rag">RAG & Code</TabsTrigger>
+          <TabsTrigger value="system">System</TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>API Keys</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <APIKeysSection />
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="general" className="space-y-8">
+          <div className="grid gap-8 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>General</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <FeaturesSection />
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>MCP Settings</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <McpConfigSection config={mcpConfig} status={safeMcpStatus} />
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-8 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>RAG Settings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RAGSettings ragSettings={ragSettings} setRagSettings={setRagSettings} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Code Extraction</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CodeExtractionSettings
-              codeExtractionSettings={codeExtractionSettings}
-              setCodeExtractionSettings={setCodeExtractionSettings}
-            />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Version & Updates</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <VersionStatusCard />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Database Migrations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MigrationStatusCard />
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Bug Reporting</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Found a bug or issue? Report it to help improve Ptolemy.
-          </p>
-          <BugReportButton variant="secondary">Report Bug</BugReportButton>
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p>• Bug reports are sent directly to GitHub Issues</p>
-            <p>• System context is automatically collected</p>
-            <p>• Your privacy is protected - no personal data is sent</p>
+            <Card>
+              <CardHeader>
+                <CardTitle>API Keys</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <APIKeysSection />
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </TabsContent>
+
+        <TabsContent value="mcp" className="space-y-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>MCP Settings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <McpConfigSection config={mcpConfig} status={safeMcpStatus} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="rag" className="space-y-8">
+          <div className="grid gap-8 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>RAG Settings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <RAGSettings ragSettings={ragSettings} setRagSettings={setRagSettings} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Code Extraction</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CodeExtractionSettings
+                  codeExtractionSettings={codeExtractionSettings}
+                  setCodeExtractionSettings={setCodeExtractionSettings}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="system" className="space-y-8">
+          <div className="grid gap-8 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Version & Updates</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <VersionStatusCard />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Database Migrations</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MigrationStatusCard />
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Bug Reporting</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Found a bug or issue? Report it to help improve Ptolemy.
+              </p>
+              <BugReportButton variant="secondary">Report Bug</BugReportButton>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p>• Bug reports are sent directly to GitHub Issues</p>
+                <p>• System context is automatically collected</p>
+                <p>• Your privacy is protected - no personal data is sent</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">

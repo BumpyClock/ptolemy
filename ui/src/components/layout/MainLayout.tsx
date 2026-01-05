@@ -1,43 +1,21 @@
 import type React from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { useToast } from "@/features/shared/hooks/useToast";
 import { credentialsService } from "@/services/credentialsService";
 import { isLmConfigured } from "@/utils/onboarding";
 import { cn } from "@/lib/utils";
 import { BackendStartupError } from "../BackendStartupError";
 import { useBackendHealth } from "./hooks/useBackendHealth";
-import { Navigation } from "./Navigation";
-import { Badge } from "@/components/ui/Badge";
-import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarTrigger } from "@/components/ui/Menubar";
-import { NavigationMenu, NavigationMenuItem, NavigationMenuLink, NavigationMenuList } from "@/components/ui/NavigationMenu";
-import { Separator } from "@/components/ui/Separator";
+import { Button } from "@/components/ui/Button";
+import { AddKnowledgeDialog } from "@/features/knowledge/components/AddKnowledgeDialog";
+import { knowledgeKeys } from "@/features/knowledge/hooks/useKnowledgeQueries";
 
 interface MainLayoutProps {
   children: React.ReactNode;
   className?: string;
-}
-
-interface BackendStatusProps {
-  isHealthLoading: boolean;
-  isBackendError: boolean;
-  healthData: { ready: boolean } | undefined;
-}
-
-function BackendStatus({ isHealthLoading, isBackendError, healthData }: BackendStatusProps) {
-  if (isHealthLoading) {
-    return <Badge variant="warning">Connecting</Badge>;
-  }
-
-  if (isBackendError) {
-    return <Badge variant="destructive">Backend Offline</Badge>;
-  }
-
-  if (healthData?.ready === false) {
-    return <Badge variant="secondary">Starting</Badge>;
-  }
-
-  return <Badge variant="success">Online</Badge>;
 }
 
 const navigationItems = [
@@ -50,12 +28,13 @@ export function MainLayout({ children, className }: MainLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const {
     data: healthData,
     isError: isBackendError,
     error: backendError,
-    isLoading: isHealthLoading,
     failureCount,
   } = useBackendHealth();
 
@@ -93,66 +72,76 @@ export function MainLayout({ children, className }: MainLayoutProps) {
     }
   }, [isBackendError, backendError, showToast]);
 
+  const handleAddKnowledgeSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: knowledgeKeys.summariesPrefix() });
+  };
+
   return (
     <div className={cn("min-h-screen bg-background", className)}>
       {backendStartupFailed && <BackendStartupError />}
 
-      <div className="flex min-h-screen">
-        <aside className="hidden w-64 flex-col border-r bg-background md:flex">
-          <div className="flex items-center gap-2 px-4 py-4">
-            <Link to="/" className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <img src="/logo-neon.png" alt="Ptolemy" className="h-6 w-6" />
-              Ptolemy
-            </Link>
-          </div>
-          <nav className="px-2">
-            <Navigation />
-          </nav>
-          <div className="mt-auto px-4 pb-5 pt-4">
-            <Separator className="mb-4" />
-            <BackendStatus isHealthLoading={isHealthLoading} isBackendError={isBackendError} healthData={healthData} />
-          </div>
-        </aside>
-
-        <div className="flex min-h-screen flex-1 flex-col">
-          <header className="flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
-            <Link to="/" className="text-sm font-semibold">
-              Ptolemy
-            </Link>
-            <NavigationMenu>
-              <NavigationMenuList>
-                {navigationItems.map((item) => (
-                  <NavigationMenuItem key={item.path}>
-                    <NavigationMenuLink asChild>
-                      <Link to={item.path} className="text-sm">
-                        {item.label}
-                      </Link>
-                    </NavigationMenuLink>
-                  </NavigationMenuItem>
-                ))}
-              </NavigationMenuList>
-            </NavigationMenu>
-          </header>
-
-          <header className="hidden items-center justify-between border-b bg-background px-6 py-3 md:flex">
-            <Menubar>
-              <MenubarMenu>
-                <MenubarTrigger>Navigate</MenubarTrigger>
-                <MenubarContent>
-                  {navigationItems.map((item) => (
-                    <MenubarItem key={item.path} onClick={() => navigate(item.path)}>
+      <div className="flex min-h-screen flex-col">
+        <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
+            <div className="flex items-center gap-6">
+              <Link to="/" className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <img src="/logo-neon.png" alt="Ptolemy" className="h-6 w-6" />
+                Ptolemy
+              </Link>
+              <nav className="hidden items-center gap-4 text-sm md:flex" aria-label="Primary">
+                {navigationItems.map((item) => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={cn(
+                        "rounded-md px-2 py-1 transition-colors",
+                        isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-current={isActive ? "page" : undefined}
+                    >
                       {item.label}
-                    </MenubarItem>
-                  ))}
-                </MenubarContent>
-              </MenubarMenu>
-            </Menubar>
-            <BackendStatus isHealthLoading={isHealthLoading} isBackendError={isBackendError} healthData={healthData} />
-          </header>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button onClick={() => setIsAddDialogOpen(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add knowledge
+              </Button>
+            </div>
+          </div>
+          <nav className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm md:hidden" aria-label="Primary">
+            {navigationItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={cn(
+                    "rounded-md px-2 py-1 transition-colors",
+                    isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </header>
 
-          <main className="flex-1 px-6 py-6">{children}</main>
-        </div>
+        <main className="flex-1 px-6 py-6">{children}</main>
       </div>
+
+      <AddKnowledgeDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        onSuccess={handleAddKnowledgeSuccess}
+      />
     </div>
   );
 }

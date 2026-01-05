@@ -1,6 +1,5 @@
-import { BookOpen, Grid, List, Plus, Search } from "lucide-react";
+import { BookOpen, Grid, List, Search } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Kbd } from "@/components/ui/Kbd";
 import { Label } from "@/components/ui/Label";
@@ -16,7 +15,6 @@ interface KnowledgeHeaderProps {
   onTypeFilterChange: (type: "all" | "technical" | "business") => void;
   viewMode: "grid" | "table";
   onViewModeChange: (mode: "grid" | "table") => void;
-  onAddKnowledge: () => void;
 }
 
 export const KnowledgeHeader: React.FC<KnowledgeHeaderProps> = ({
@@ -28,7 +26,6 @@ export const KnowledgeHeader: React.FC<KnowledgeHeaderProps> = ({
   onTypeFilterChange,
   viewMode,
   onViewModeChange,
-  onAddKnowledge,
 }) => {
   return (
     <div className="flex flex-col gap-4 pb-4">
@@ -40,10 +37,6 @@ export const KnowledgeHeader: React.FC<KnowledgeHeaderProps> = ({
             <Badge variant="secondary">{isLoading ? "Loading..." : `${totalItems} items`}</Badge>
           </div>
         </div>
-        <Button onClick={onAddKnowledge} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add knowledge
-        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

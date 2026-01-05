@@ -10,6 +10,7 @@ interface KnowledgeListProps {
   items: KnowledgeItem[];
   viewMode: "grid" | "table";
   isLoading: boolean;
+  isLoadingMore?: boolean;
   error: Error | null;
   onRetry: () => void;
   onViewDocument: (sourceId: string) => void;
@@ -23,6 +24,7 @@ export const KnowledgeList: React.FC<KnowledgeListProps> = ({
   items,
   viewMode,
   isLoading,
+  isLoadingMore = false,
   error,
   onRetry,
   onViewDocument,
@@ -96,7 +98,14 @@ export const KnowledgeList: React.FC<KnowledgeListProps> = ({
   }
 
   if (viewMode === "table") {
-    return <KnowledgeTable items={items} onViewDocument={onViewDocument} onDeleteSuccess={onDeleteSuccess} />;
+    return (
+      <KnowledgeTable
+        items={items}
+        onViewDocument={onViewDocument}
+        onDeleteSuccess={onDeleteSuccess}
+        isLoadingMore={isLoadingMore}
+      />
+    );
   }
 
   return (
@@ -115,6 +124,16 @@ export const KnowledgeList: React.FC<KnowledgeListProps> = ({
           />
         );
       })}
+      {isLoadingMore &&
+        Array.from({ length: 4 }).map((_, index) => (
+          <div key={`loading-more-${index}`} className="rounded-lg border bg-card p-4">
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+          </div>
+        ))}
     </div>
   );
 };

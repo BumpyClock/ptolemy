@@ -7,29 +7,32 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/features/shared/hooks/useToast";
 import { CrawlingProgress } from "../../progress/components/CrawlingProgress";
 import type { ActiveOperation } from "../../progress/types";
-import { AddKnowledgeDialog } from "../components/AddKnowledgeDialog";
 import { KnowledgeHeader } from "../components/KnowledgeHeader";
 import { KnowledgeList } from "../components/KnowledgeList";
 import { useKnowledgeSummaries } from "../hooks/useKnowledgeQueries";
 import { KnowledgeInspector } from "../inspector/components/KnowledgeInspector";
 import type { KnowledgeItem, KnowledgeItemsFilter } from "../types";
 
+const INITIAL_PAGE = 1;
+const PAGE_SIZE = 24;
+
 export const KnowledgeView = () => {
   // View state
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "technical" | "business">("all");
+  const [page, setPage] = useState(INITIAL_PAGE);
+  const [items, setItems] = useState<KnowledgeItem[]>([]);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  // Dialog state
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [inspectorItem, setInspectorItem] = useState<KnowledgeItem | null>(null);
   const [inspectorInitialTab, setInspectorInitialTab] = useState<"documents" | "code">("documents");
 
   // Build filter object for API - memoize to prevent recreating on every render
   const filter = useMemo<KnowledgeItemsFilter>(() => {
     const f: KnowledgeItemsFilter = {
-      page: 1,
-      per_page: 100,
+      page,
+      per_page: PAGE_SIZE,
     };
 
     if (searchQuery) {
@@ -41,13 +44,17 @@ export const KnowledgeView = () => {
     }
 
     return f;
-  }, [searchQuery, typeFilter]);
+  }, [searchQuery, typeFilter, page]);
 
   // Fetch knowledge summaries (no automatic polling!)
-  const { data, isLoading, error, refetch, setActiveCrawlIds, activeOperations } = useKnowledgeSummaries(filter);
+  const { data, isLoading, isFetching, error, refetch, setActiveCrawlIds, activeOperations } =
+    useKnowledgeSummaries(filter);
 
-  const knowledgeItems = data?.items || [];
+  const knowledgeItems = items;
   const totalItems = data?.total || 0;
+  const perPage = data?.per_page || PAGE_SIZE;
+  const totalPages = totalItems > 0 ? Math.ceil(totalItems / perPage) : 1;
+  const hasMorePages = page < totalPages;
   const hasActiveOperations = activeOperations.length > 0;
 
   // Toast notifications
@@ -92,9 +99,22 @@ export const KnowledgeView = () => {
     previousOperations.current = [...activeOperations];
   }, [activeOperations, showToast, refetch, setActiveCrawlIds]);
 
-  const handleAddKnowledge = () => {
-    setIsAddDialogOpen(true);
-  };
+  useEffect(() => {
+    if (!data?.items) return;
+
+    if (page === INITIAL_PAGE) {
+      setItems(data.items);
+      return;
+    }
+
+    setItems((prev) => {
+      const next = new Map(prev.map((item) => [item.source_id, item]));
+      for (const item of data.items) {
+        next.set(item.source_id, item);
+      }
+      return Array.from(next.values());
+    });
+  }, [data?.items, page]);
 
   const handleViewDocument = (sourceId: string) => {
     // Find the item and open inspector to documents tab
@@ -118,6 +138,48 @@ export const KnowledgeView = () => {
     // TanStack Query will automatically refetch
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setPage(INITIAL_PAGE);
+    setItems([]);
+  };
+
+  const handleTypeFilterChange = (value: "all" | "technical" | "business") => {
+    setTypeFilter(value);
+    setPage(INITIAL_PAGE);
+    setItems([]);
+  };
+
+  const handleViewModeChange = (value: "grid" | "table") => {
+    setViewMode(value);
+    setPage(INITIAL_PAGE);
+    setItems([]);
+  };
+
+  const handleLoadMore = () => {
+    if (hasMorePages && !isFetching) {
+      setPage((prev) => prev + 1);
+    }
+  };
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMorePages) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry?.isIntersecting) {
+          handleLoadMore();
+        }
+      },
+      { rootMargin: "200px 0px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMorePages, isFetching]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -125,12 +187,11 @@ export const KnowledgeView = () => {
         totalItems={totalItems}
         isLoading={isLoading}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={handleSearchChange}
         typeFilter={typeFilter}
-        onTypeFilterChange={setTypeFilter}
+        onTypeFilterChange={handleTypeFilterChange}
         viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        onAddKnowledge={handleAddKnowledge}
+        onViewModeChange={handleViewModeChange}
       />
 
       {/* Main Content */}
@@ -154,6 +215,7 @@ export const KnowledgeView = () => {
           items={knowledgeItems}
           viewMode={viewMode}
           isLoading={isLoading}
+          isLoadingMore={isFetching && knowledgeItems.length > 0}
           error={error}
           onRetry={refetch}
           onViewDocument={handleViewDocument}
@@ -165,22 +227,18 @@ export const KnowledgeView = () => {
             setActiveCrawlIds((prev) => [...prev, progressId]);
           }}
         />
+
+        {hasMorePages && !error && (
+          <div ref={loadMoreRef} className="mt-8 flex justify-center py-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground/50 animate-pulse" />
+              {isFetching ? "Loading more" : "Scroll to load more"}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dialogs */}
-      <AddKnowledgeDialog
-        open={isAddDialogOpen}
-        onOpenChange={setIsAddDialogOpen}
-        onSuccess={() => {
-          setIsAddDialogOpen(false);
-          refetch();
-        }}
-        onCrawlStarted={(progressId) => {
-          // Add the progress ID to track it
-          setActiveCrawlIds((prev) => [...prev, progressId]);
-        }}
-      />
-
       {/* Knowledge Inspector Modal */}
       {inspectorItem && (
         <KnowledgeInspector

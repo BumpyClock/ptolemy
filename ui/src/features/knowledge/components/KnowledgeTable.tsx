@@ -19,9 +19,15 @@ interface KnowledgeTableProps {
   items: KnowledgeItem[];
   onViewDocument: (sourceId: string) => void;
   onDeleteSuccess: () => void;
+  isLoadingMore?: boolean;
 }
 
-export const KnowledgeTable: React.FC<KnowledgeTableProps> = ({ items, onViewDocument, onDeleteSuccess }) => {
+export const KnowledgeTable: React.FC<KnowledgeTableProps> = ({
+  items,
+  onViewDocument,
+  onDeleteSuccess,
+  isLoadingMore = false,
+}) => {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
   const deleteMutation = useDeleteKnowledgeItem();
@@ -150,6 +156,16 @@ export const KnowledgeTable: React.FC<KnowledgeTableProps> = ({ items, onViewDoc
             </TableRow>
           );
         })}
+        {isLoadingMore && (
+          <TableRow>
+            <TableCell colSpan={7} className="py-6">
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <div className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-pulse" />
+                Loading more knowledge items
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
       </TableBody>
     </Table>
   );

@@ -1206,6 +1206,7 @@ const manualTestConnection = async (
           const isSelected =
             selection === 'chat' ? chatProvider === providerKey : embeddingProvider === providerKey;
           const status = getProviderStatus(providerKey);
+          const isConfigured = status === 'configured';
 
           return (
             <button
@@ -1215,6 +1216,9 @@ const manualTestConnection = async (
               className={cn(
                 'relative flex flex-col items-center gap-2 rounded-md border p-3 text-center text-sm transition',
                 isSelected ? colorStyles[providerKey] : 'border-border hover:bg-muted/50',
+                isConfigured
+                  ? 'border-emerald-400/60 shadow-[0_0_0_1px_rgba(16,185,129,0.35),0_10px_24px_rgba(16,185,129,0.18)]'
+                  : 'opacity-55 grayscale',
               )}
             >
               <img
@@ -1226,12 +1230,6 @@ const manualTestConnection = async (
                 )}
               />
               <span className={provider.key === 'openrouter' ? 'text-xs' : 'text-sm'}>{provider.name}</span>
-              <Badge
-                variant={statusToBadgeVariant(status)}
-                className="absolute right-2 top-2 text-[10px] uppercase"
-              >
-                {status}
-              </Badge>
             </button>
           );
         })}
