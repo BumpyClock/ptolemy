@@ -153,6 +153,10 @@ class ServerHealthService {
     };
   }
 
+  async isHealthy(): Promise<boolean> {
+    return this.checkHealth();
+  }
+
   async updateSettings(settings: { enabled?: boolean }) {
     if (settings.enabled !== undefined) {
       this.disconnectScreenEnabled = settings.enabled;

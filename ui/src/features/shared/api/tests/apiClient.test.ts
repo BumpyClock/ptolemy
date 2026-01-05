@@ -4,15 +4,13 @@ import { callAPIWithETag } from "../apiClient";
 
 // Preserve original globals to restore after tests
 const originalAbortSignal = global.AbortSignal as any;
-const originalFetch = global.fetch;
+const originalFetch = (global as typeof globalThis & { fetch?: typeof fetch }).fetch;
 
 describe("apiClient (callAPIWithETag)", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     // Reset fetch to undefined to ensure clean state
-    if (global.fetch) {
-      delete (global as any).fetch;
-    }
+    delete (global as any).fetch;
 
     // Mock AbortSignal.timeout for test environment
     // Note: Production now uses 20s timeout for database performance issues
@@ -32,7 +30,7 @@ describe("apiClient (callAPIWithETag)", () => {
     global.AbortSignal = originalAbortSignal;
     if (originalFetch) {
       global.fetch = originalFetch;
-    } else if (global.fetch) {
+    } else {
       delete (global as any).fetch;
     }
   });
@@ -380,7 +378,8 @@ describe("apiClient (callAPIWithETag)", () => {
       // When server data changes, we get new data automatically
 
       // Request 1: Initial data
-      const v1Data = { version: 1, content: "Original" };
+      type ContentPayload = { version: number; content: string };
+      const v1Data: ContentPayload = { version: 1, content: "Original" };
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -388,13 +387,13 @@ describe("apiClient (callAPIWithETag)", () => {
         headers: new Headers({ ETag: 'W/"v1"' }),
       });
 
-      const result1 = await callAPIWithETag("/api/content");
+      const result1 = await callAPIWithETag<ContentPayload>("/api/content");
       expect(result1).toEqual(v1Data);
 
       // Data changes on server...
 
       // Request 2: Updated data (browser sends old ETag, server returns new data)
-      const v2Data = { version: 2, content: "Updated" };
+      const v2Data: ContentPayload = { version: 2, content: "Updated" };
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         status: 200, // New data, not 304
@@ -402,7 +401,7 @@ describe("apiClient (callAPIWithETag)", () => {
         headers: new Headers({ ETag: 'W/"v2"' }), // New ETag
       });
 
-      const result2 = await callAPIWithETag("/api/content");
+      const result2 = await callAPIWithETag<ContentPayload>("/api/content");
       expect(result2).toEqual(v2Data); // We get fresh data automatically
 
       // No special handling needed - it just works

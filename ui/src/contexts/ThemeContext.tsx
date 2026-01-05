@@ -11,7 +11,7 @@ export const ThemeProvider: React.FC<{
   // Read from localStorage immediately to avoid flash
   const [theme, setTheme] = useState<Theme>(() => {
     const savedTheme = localStorage.getItem('theme') as Theme | null;
-    return savedTheme || 'dark';
+    return savedTheme || 'light';
   });
   useEffect(() => {
     // Apply theme class to document element

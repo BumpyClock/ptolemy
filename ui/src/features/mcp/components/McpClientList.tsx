@@ -1,7 +1,8 @@
-import { motion } from "framer-motion";
 import { Activity, Clock, Monitor } from "lucide-react";
 import type React from "react";
-import { cn, compoundStyles, glassmorphism } from "../../ui/primitives";
+import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/utils";
 import type { McpClient } from "../types";
 
 interface McpClientListProps {
@@ -17,7 +18,7 @@ const clientIcons: Record<string, string> = {
   KiRo: "🚀",
   Augment: "⚡",
   Gemini: "🌐",
-  Unknown: "❓",
+  Unknown: "?",
 };
 
 export const McpClientList: React.FC<McpClientListProps> = ({ clients, className }) => {
@@ -44,56 +45,42 @@ export const McpClientList: React.FC<McpClientListProps> = ({ clients, className
 
   if (clients.length === 0) {
     return (
-      <div className={cn(compoundStyles.card, "p-6 text-center rounded-lg relative overflow-hidden", className)}>
-        <div className="absolute top-3 right-3 px-2 py-1 bg-cyan-500/20 text-cyan-400 text-xs font-semibold rounded-full border border-cyan-500/30">
-          Coming Soon
+      <Card className={cn("p-6 text-center", className)}>
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+          <Monitor className="h-6 w-6 text-muted-foreground" />
         </div>
-        <Monitor className="w-12 h-12 mx-auto mb-3 text-zinc-500" />
-        <p className="text-zinc-400">Client detection coming soon</p>
-        <p className="text-sm text-zinc-500 mt-2">
-          We'll automatically detect when AI assistants connect to the MCP server
-        </p>
-      </div>
+        <p className="text-sm text-muted-foreground">Client detection coming soon.</p>
+      </Card>
     );
   }
 
   return (
     <div className={cn("space-y-3", className)}>
-      {clients.map((client, index) => (
-        <motion.div
-          key={client.session_id}
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: index * 0.1 }}
-          className={cn(
-            "flex items-center justify-between p-4 rounded-lg",
-            glassmorphism.background.card,
-            glassmorphism.border.default,
-            client.status === "active" ? "border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.2)]" : "",
-          )}
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{clientIcons[client.client_type] || "❓"}</span>
-            <div>
-              <p className="font-medium text-white">{client.client_type}</p>
-              <p className="text-xs text-zinc-400">Session: {client.session_id.slice(0, 8)}</p>
+      {clients.map((client) => (
+        <Card key={client.session_id} className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{clientIcons[client.client_type] || "?"}</span>
+              <div>
+                <p className="text-sm font-medium">{client.client_type}</p>
+                <p className="text-xs text-muted-foreground">Session: {client.session_id.slice(0, 8)}</p>
+              </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-1">
-              <Clock className="w-3 h-3 text-blue-400" />
-              <span className="text-zinc-400">{formatDuration(client.connected_at)}</span>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <Activity className="w-3 h-3 text-green-400" />
-              <span className={cn("text-zinc-400", client.status === "active" && "text-green-400")}>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {formatDuration(client.connected_at)}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Activity className="h-3 w-3" />
                 {formatLastActivity(client.last_activity)}
               </span>
+              <Badge variant={client.status === "active" ? "success" : "secondary"}>
+                {client.status}
+              </Badge>
             </div>
           </div>
-        </motion.div>
+        </Card>
       ))}
     </div>
   );

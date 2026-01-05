@@ -1,7 +1,7 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Button } from "../primitives";
-import { cn, glassmorphism } from "../primitives/styles";
+import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 
 interface Props {
   children: ReactNode;
@@ -52,32 +52,32 @@ export class FeatureErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       const { error, errorInfo } = this.state;
-      const isDevelopment = process.env.NODE_ENV === "development";
+      const isDevelopment = import.meta.env.DEV;
 
       return (
-        <div className={cn("min-h-[400px] flex items-center justify-center p-8", glassmorphism.background.subtle)}>
+        <div className="min-h-[400px] flex items-center justify-center p-8">
           <div className="max-w-2xl w-full">
             <div className="flex items-start gap-4" role="alert" aria-live="assertive" aria-atomic="true">
               <div
                 className={cn(
                   "p-3 rounded-lg",
-                  "bg-red-500/10 dark:bg-red-500/20",
-                  "border border-red-500/20 dark:border-red-500/30",
+                  "bg-destructive/10",
+                  "border border-destructive/20",
                 )}
               >
                 <AlertTriangle
-                  className="w-6 h-6 text-red-600 dark:text-red-400"
+                  className="w-6 h-6 text-destructive"
                   aria-hidden="true"
                   focusable="false"
                 />
               </div>
 
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <div className="flex-1 rounded-lg border bg-card p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-foreground mb-2">
                   Feature Error: {this.props.featureName}
                 </h2>
 
-                <p className="text-gray-700 dark:text-gray-300 mb-4">
+                <p className="text-muted-foreground mb-4">
                   An error occurred in this feature. The error has been logged for investigation.
                 </p>
 
@@ -86,19 +86,19 @@ export class FeatureErrorBoundary extends Component<Props, State> {
                   <div
                     className={cn(
                       "mb-4 p-4 rounded-lg overflow-auto max-h-[300px]",
-                      "bg-gray-100 dark:bg-gray-800",
-                      "border border-gray-300 dark:border-gray-600",
+                      "bg-muted",
+                      "border border-border",
                       "font-mono text-xs",
                     )}
                   >
-                    <div className="text-red-600 dark:text-red-400 font-semibold mb-2">{error.toString()}</div>
+                    <div className="text-destructive font-semibold mb-2">{error.toString()}</div>
                     {error.stack && (
-                      <pre className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{error.stack}</pre>
+                      <pre className="text-muted-foreground whitespace-pre-wrap">{error.stack}</pre>
                     )}
                     {errorInfo?.componentStack && (
-                      <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-600">
-                        <div className="text-gray-700 dark:text-gray-300 font-semibold mb-2">Component Stack:</div>
-                        <pre className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                      <div className="mt-4 pt-4 border-t border-border">
+                        <div className="text-muted-foreground font-semibold mb-2">Component Stack:</div>
+                        <pre className="text-muted-foreground whitespace-pre-wrap">
                           {errorInfo.componentStack}
                         </pre>
                       </div>

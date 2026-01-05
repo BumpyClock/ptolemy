@@ -5,7 +5,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { knowledgeService } from '../../../src/features/knowledge/services';
-import type { KnowledgeItemsResponse, CrawlStartResponse } from '../../../src/features/knowledge/types';
 
 // Skip in CI, only run locally with backend
 const skipInCI = process.env.CI ? describe.skip : describe;

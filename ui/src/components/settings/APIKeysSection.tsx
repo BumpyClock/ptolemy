@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Key, Plus, Trash2, Save, Lock, Unlock, Eye, EyeOff } from 'lucide-react';
-import { Input } from '../ui/Input';
-import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
-import { credentialsService, Credential } from '../../services/credentialsService';
-import { useToast } from '../../features/shared/hooks/useToast';
+import { Plus, Trash2, Save, Lock, Unlock, Eye, EyeOff } from 'lucide-react';
+import { Button } from "@/components/ui/Button";
+import { credentialsService } from "../../services/credentialsService";
+import { useToast } from "../../features/shared/hooks/useToast";
 
 interface CustomCredential {
   key: string;
@@ -53,8 +51,6 @@ export const APIKeysSection = () => {
       
       // Convert to UI format
       const uiCredentials = apiKeys.map(cred => {
-        const isEncryptedFromBackend = cred.is_encrypted && cred.value === '[ENCRYPTED]';
-        
         return {
           key: cred.key,
           value: cred.value || '',
@@ -65,7 +61,7 @@ export const APIKeysSection = () => {
           is_encrypted: cred.is_encrypted || false,
           showValue: false,
           isNew: false,
-          isFromBackend: !cred.isNew, // Mark as from backend unless it's a new credential
+          isFromBackend: true,
         };
       });
       
@@ -212,29 +208,28 @@ export const APIKeysSection = () => {
   if (loading) {
     return (
       <div className="space-y-5">
-        <Card accentColor="pink" className="space-y-5">
+        <div className="space-y-5 rounded-lg bg-muted/40 p-6">
           <div className="animate-pulse space-y-4">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
-            <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
-            <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div className="h-4 bg-muted rounded w-1/2"></div>
+            <div className="h-10 bg-muted rounded"></div>
+            <div className="h-10 bg-muted rounded"></div>
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <Card accentColor="pink" className="p-8">
-        <div className="space-y-4">
+    <div className="space-y-4">
           {/* Description text */}
-          <p className="text-sm text-gray-600 dark:text-zinc-400 mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             Manage your API keys and credentials for various services used by Ptolemy.
           </p>
 
           {/* Credentials list */}
           <div className="space-y-3">
             {/* Header row */}
-            <div className="grid grid-cols-[240px_1fr_40px] gap-4 px-2 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            <div className="grid grid-cols-[240px_1fr_40px] gap-4 px-2 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
               <div>Key Name</div>
               <div>Value</div>
               <div></div>
@@ -253,7 +248,7 @@ export const APIKeysSection = () => {
                     value={cred.key}
                     onChange={(e) => updateCredential(index, 'key', e.target.value)}
                     placeholder="Enter key name"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-sm font-mono"
+                    className="w-full px-3 py-2 rounded-md bg-background border border-input text-sm font-mono text-foreground"
                   />
                 </div>
 
@@ -265,10 +260,10 @@ export const APIKeysSection = () => {
                       value={cred.value}
                       onChange={(e) => updateCredential(index, 'value', e.target.value)}
                       placeholder={cred.is_encrypted && !cred.value ? 'Enter new value (encrypted)' : 'Enter value'}
-                      className={`w-full px-3 py-2 pr-20 rounded-md border text-sm ${
+                      className={`w-full px-3 py-2 pr-20 rounded-md border text-sm text-foreground ${
                         cred.isFromBackend && cred.is_encrypted && cred.value === '[ENCRYPTED]'
-                          ? 'bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400'
-                          : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700'
+                          ? 'bg-muted border-border text-muted-foreground'
+                          : 'bg-background border-input'
                       }`}
                       title={cred.isFromBackend && cred.is_encrypted && cred.value === '[ENCRYPTED]' 
                         ? 'Click to edit this encrypted credential' 
@@ -283,7 +278,7 @@ export const APIKeysSection = () => {
                       className={`absolute right-10 top-1/2 -translate-y-1/2 p-1.5 rounded transition-colors ${
                         cred.isFromBackend && cred.is_encrypted && cred.value === '[ENCRYPTED]'
                           ? 'cursor-not-allowed opacity-50'
-                          : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                          : 'hover:bg-muted'
                       }`}
                       title={
                         cred.isFromBackend && cred.is_encrypted && cred.value === '[ENCRYPTED]'
@@ -292,9 +287,9 @@ export const APIKeysSection = () => {
                       }
                     >
                       {cred.showValue ? (
-                        <EyeOff className="w-4 h-4 text-gray-500" />
+                        <EyeOff className="w-4 h-4 text-muted-foreground" />
                       ) : (
-                        <Eye className="w-4 h-4 text-gray-500" />
+                        <Eye className="w-4 h-4 text-muted-foreground" />
                       )}
                     </button>
                     
@@ -306,10 +301,10 @@ export const APIKeysSection = () => {
                       className={`
                         absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded transition-colors
                         ${cred.isFromBackend && cred.is_encrypted && cred.value === '[ENCRYPTED]'
-                          ? 'cursor-not-allowed opacity-50 text-pink-400'
-                          : cred.is_encrypted 
-                            ? 'text-pink-600 dark:text-pink-400 hover:bg-pink-100 dark:hover:bg-pink-900/20' 
-                            : 'text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                          ? 'cursor-not-allowed opacity-50 text-muted-foreground'
+                          : cred.is_encrypted
+                            ? 'text-foreground hover:bg-muted'
+                            : 'text-muted-foreground hover:bg-muted'
                         }
                       `}
                       title={
@@ -331,7 +326,7 @@ export const APIKeysSection = () => {
                 <div className="flex items-center justify-center">
                   <button
                     onClick={() => deleteCredential(index)}
-                    className="p-1 rounded text-gray-400 hover:text-red-600 transition-colors"
+                    className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
                     title="Delete credential"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -342,13 +337,8 @@ export const APIKeysSection = () => {
           </div>
 
           {/* Add credential button */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Button
-              variant="outline"
-              onClick={handleAddNewRow}
-              accentColor="pink"
-              size="sm"
-            >
+          <div className="pt-4 border-t border-border">
+            <Button variant="outline" onClick={handleAddNewRow} size="sm">
               <Plus className="w-3.5 h-3.5 mr-1.5" />
               Add Credential
             </Button>
@@ -364,13 +354,7 @@ export const APIKeysSection = () => {
               >
                 Cancel
               </Button>
-              <Button
-                variant="primary"
-                onClick={saveAllChanges}
-                accentColor="green"
-                disabled={saving}
-                className="shadow-emerald-500/20 shadow-sm"
-              >
+              <Button variant="default" onClick={saveAllChanges} disabled={saving}>
                 {saving ? (
                   <>
                     <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -387,17 +371,16 @@ export const APIKeysSection = () => {
           )}
 
           {/* Security Notice */}
-          <div className="p-3 mt-6 mb-2 bg-gray-50 dark:bg-black/40 rounded-md flex items-start gap-3">
-            <div className="w-5 h-5 text-pink-500 mt-0.5 flex-shrink-0">
+          <div className="p-3 mt-6 mb-2 bg-muted rounded-md flex items-start gap-3">
+            <div className="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0">
               <Lock className="w-5 h-5" />
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="text-sm text-muted-foreground">
               <p>
                 Encrypted credentials are masked after saving. Click on a masked credential to edit it - this allows you to change the value and encryption settings.
               </p>
             </div>
           </div>
         </div>
-      </Card>
   );
 };

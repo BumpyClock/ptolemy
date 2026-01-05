@@ -63,17 +63,12 @@ class AgentChatService {
         method: 'GET',
       });
       
-      if (response.ok) {
-        this.serverStatus = 'online';
-        return 'online';
-      } else {
-        this.serverStatus = 'offline';
-        return 'offline';
-      }
+      this.serverStatus = response.ok ? 'online' : 'offline';
+      return this.serverStatus;
     } catch (error) {
       console.error('Failed to check chat server status:', error);
       this.serverStatus = 'offline';
-      return 'offline';
+      return this.serverStatus;
     }
   }
 
@@ -289,6 +284,30 @@ class AgentChatService {
     }
 
     return this.checkServerStatus();
+  }
+
+  /**
+   * Attempt a manual reconnection flow for an existing session
+   */
+  async manualReconnect(sessionId: string): Promise<boolean> {
+    const serverHealthy = await serverHealthService.isHealthy();
+    if (!serverHealthy) {
+      this.serverStatus = 'offline';
+      return false;
+    }
+
+    const status = await this.checkServerStatus();
+    if (status !== 'online') {
+      return false;
+    }
+
+    const sessionValid = await this.validateSession(sessionId);
+    if (!sessionValid) {
+      return false;
+    }
+
+    this.serverStatus = 'online';
+    return true;
   }
 
   /**

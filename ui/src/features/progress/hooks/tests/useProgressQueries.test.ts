@@ -65,7 +65,6 @@ describe("useProgressQueries", () => {
         status: "processing",
         message: "Processing...",
         progress: 50,
-        details: {},
       };
 
       const { progressService } = await import("../../services");
@@ -88,7 +87,6 @@ describe("useProgressQueries", () => {
         status: "completed",
         message: "Completed",
         progress: 100,
-        details: { result: "success" },
       };
 
       const { progressService } = await import("../../services");
@@ -140,23 +138,32 @@ describe("useProgressQueries", () => {
 
   describe("useActiveOperations", () => {
     it("should fetch active operations when enabled", async () => {
+      const now = new Date().toISOString();
       const mockOperations: ActiveOperationsResponse = {
         operations: [
           {
+            operation_id: "op-1",
+            operation_type: "crawl",
             progressId: "op-1",
-            sourceId: "source-1",
+            source_id: "source-1",
             status: "processing",
             message: "Processing document",
             progress: 30,
+            started_at: now,
           },
           {
+            operation_id: "op-2",
+            operation_type: "crawl",
             progressId: "op-2",
-            sourceId: "source-2",
+            source_id: "source-2",
             status: "processing",
             message: "Crawling website",
             progress: 60,
+            started_at: now,
           },
         ],
+        count: 2,
+        timestamp: now,
       };
 
       const { progressService } = await import("../../services");
@@ -186,16 +193,22 @@ describe("useProgressQueries", () => {
 
   describe("useCrawlProgressPolling", () => {
     it("should poll for active crawl operations", async () => {
+      const now = new Date().toISOString();
       const mockOperations: ActiveOperationsResponse = {
         operations: [
           {
+            operation_id: "crawl-1",
+            operation_type: "crawl",
             progressId: "crawl-1",
-            sourceId: "source-1",
+            source_id: "source-1",
             status: "processing",
             message: "Crawling page 1 of 5",
             progress: 20,
+            started_at: now,
           },
         ],
+        count: 1,
+        timestamp: now,
       };
 
       const { progressService } = await import("../../services");
@@ -215,6 +228,7 @@ describe("useProgressQueries", () => {
       const emptyResponse: ActiveOperationsResponse = {
         operations: [],
         count: 0,
+        timestamp: new Date().toISOString(),
       };
 
       const { progressService } = await import("../../services");
@@ -231,17 +245,22 @@ describe("useProgressQueries", () => {
     });
 
     it("should identify active operations correctly", async () => {
+      const now = new Date().toISOString();
       const mockOperations: ActiveOperationsResponse = {
         operations: [
           {
+            operation_id: "op-1",
+            operation_type: "crawl",
             progressId: "op-1",
-            sourceId: "source-1",
+            source_id: "source-1",
             status: "processing",
             message: "Active operation",
             progress: 50,
+            started_at: now,
           },
         ],
         count: 1,
+        timestamp: now,
       };
 
       const { progressService } = await import("../../services");

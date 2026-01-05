@@ -9,10 +9,8 @@ import { MCPPage } from './pages/MCPPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { MainLayout } from './components/layout/MainLayout';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { ToastProvider } from './features/ui/components/ToastProvider';
-import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import { TooltipProvider } from './features/ui/primitives/tooltip';
-import StyleGuidePage from './pages/StyleGuidePage';
+import { Toaster } from "sonner";
+import { TooltipProvider } from "./components/ui/Tooltip";
 import { DisconnectScreenOverlay } from './components/DisconnectScreenOverlay';
 import { ErrorBoundaryWithBugReport } from './components/bug-report/ErrorBoundaryWithBugReport';
 import { MigrationBanner } from './components/ui/MigrationBanner';
@@ -20,23 +18,15 @@ import { serverHealthService } from './services/serverHealthService';
 import { useMigrationStatus } from './hooks/useMigrationStatus';
 
 
-const AppRoutes = () => {
-  const { styleGuideEnabled } = useSettings();
-
-  return (
-    <Routes>
-      <Route path="/" element={<KnowledgeBasePage />} />
-      <Route path="/onboarding" element={<OnboardingPage />} />
-      <Route path="/settings" element={<SettingsPage />} />
-      <Route path="/mcp" element={<MCPPage />} />
-      {styleGuideEnabled ? (
-        <Route path="/style-guide" element={<StyleGuidePage />} />
-      ) : (
-        <Route path="/style-guide" element={<Navigate to="/" replace />} />
-      )}
-    </Routes>
-  );
-};
+const AppRoutes = () => (
+  <Routes>
+    <Route path="/" element={<KnowledgeBasePage />} />
+    <Route path="/onboarding" element={<OnboardingPage />} />
+    <Route path="/settings" element={<SettingsPage />} />
+    <Route path="/mcp" element={<MCPPage />} />
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes>
+);
 
 const AppContent = () => {
   const [disconnectScreenActive, setDisconnectScreenActive] = useState(false);
@@ -51,7 +41,7 @@ const AppContent = () => {
   useEffect(() => {
     // Load initial settings
     const settings = serverHealthService.getSettings();
-    setDisconnectScreenSettings(settings);
+    setDisconnectScreenSettings((prev) => ({ ...prev, ...settings }));
 
     // Stop any existing monitoring before starting new one to prevent multiple intervals
     serverHealthService.stopMonitoring();
@@ -109,13 +99,10 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <ToastProvider>
-          <TooltipProvider>
-            <SettingsProvider>
-              <AppContent />
-            </SettingsProvider>
-          </TooltipProvider>
-        </ToastProvider>
+        <TooltipProvider>
+          <AppContent />
+        </TooltipProvider>
+        <Toaster richColors closeButton />
       </ThemeProvider>
       {import.meta.env.VITE_SHOW_DEVTOOLS === 'true' && (
         <ReactQueryDevtools initialIsOpen={false} />

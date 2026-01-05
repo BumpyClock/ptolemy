@@ -1,12 +1,8 @@
-/**
- * Inspector Sidebar Component
- * Displays list of documents or code examples with search
- */
-
-import { motion } from "framer-motion";
 import { Code, FileText, Hash, Loader2, Search } from "lucide-react";
-import { Button, Input } from "../../../ui/primitives";
-import { cn } from "../../../ui/primitives/styles";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { ScrollArea } from "@/components/ui/ScrollArea";
+import { cn } from "@/lib/utils";
 import type { CodeExample, DocumentChunk } from "../../types";
 
 interface InspectorSidebarProps {
@@ -38,11 +34,9 @@ export const InspectorSidebar: React.FC<InspectorSidebarProps> = ({
     const idSuffix = String(item.id).slice(-6);
     if (viewMode === "documents") {
       const doc = item as DocumentChunk;
-      // Use top-level title (from filename/headers), fallback to metadata, then generic
       return doc.title || doc.metadata?.title || doc.metadata?.section || `Document ${idSuffix}`;
     }
     const code = item as CodeExample;
-    // Use AI-generated title first, fallback to filename, then summary, then generic
     return (
       code.title || code.example_name || code.file_path?.split("/").pop() || code.summary || `Code Example ${idSuffix}`
     );
@@ -51,7 +45,6 @@ export const InspectorSidebar: React.FC<InspectorSidebarProps> = ({
   const getItemDescription = (item: DocumentChunk | CodeExample) => {
     if (viewMode === "documents") {
       const doc = item as DocumentChunk;
-      // Use formatted section, fallback to metadata section, then content preview
       const preview = doc.content ? `${doc.content.substring(0, 100)}...` : "No preview available";
       return doc.section || doc.metadata?.section || preview;
     }
@@ -60,137 +53,99 @@ export const InspectorSidebar: React.FC<InspectorSidebarProps> = ({
       code.metadata?.summary_pending ||
       code.metadata?.summary_status === "pending" ||
       code.summary === "Summary pending";
-    if (isSummaryPending) {
-      return "Summarizing code example...";
-    }
+    if (isSummaryPending) return "Summarizing code example...";
     return code.summary || (code.language ? `${code.language} code snippet` : "Code snippet");
   };
 
   return (
-    <aside className="w-80 border-r border-white/10 flex flex-col bg-black/40" aria-label="Document and code browser">
-      {/* Search */}
-      <div className="p-4 border-b border-white/10 flex-shrink-0">
+    <aside className="w-80 border-r bg-background" aria-label="Document and code browser">
+      <div className="border-b p-4">
         <div className="relative">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none"
-            aria-hidden="true"
-          />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={`Search ${viewMode}...`}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 bg-black/30"
+            className="pl-9"
             aria-label={`Search ${viewMode}`}
           />
         </div>
       </div>
 
-      {/* Item List */}
-      <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
+      <ScrollArea className="h-[calc(80vh-120px)]">
         {isLoading ? (
-          <div className="p-4 text-center text-gray-500" aria-live="polite">
-            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" aria-hidden="true" />
+          <div className="p-4 text-center text-muted-foreground" aria-live="polite">
+            <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" aria-hidden="true" />
             <span>Loading {viewMode}...</span>
           </div>
         ) : items.length === 0 ? (
-          <div className="p-4 text-center text-gray-500">
+          <div className="p-4 text-center text-muted-foreground">
             No {viewMode} found
-            {searchQuery && <p className="text-xs mt-1">Try adjusting your search</p>}
+            {searchQuery && <p className="mt-1 text-xs">Try adjusting your search</p>}
           </div>
         ) : (
           <div className="p-2">
             {items.map((item) => (
-              <motion.button
+              <button
                 type="button"
                 key={item.id}
-                whileHover={{ x: 2 }}
-                whileTap={{ scale: 0.98 }}
                 onClick={() => onItemSelect(item)}
                 className={cn(
-                  "w-full text-left p-3 rounded-lg mb-1 transition-all",
-                  "hover:bg-white/5 dark:hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-cyan-500/50",
-                  selectedItemId === item.id
-                    ? "bg-cyan-500/10 dark:bg-cyan-500/10 border border-cyan-500/30 dark:border-cyan-500/30 ring-1 ring-cyan-500/20"
-                    : "border border-transparent",
+                  "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
+                  "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  selectedItemId === item.id ? "bg-accent" : "bg-transparent",
                 )}
                 role="option"
                 aria-selected={selectedItemId === item.id}
                 aria-label={`${getItemTitle(item)}. ${getItemDescription(item)}`}
               >
                 <div className="flex items-start gap-3">
-                  {/* Icon - Fixed size */}
                   <div className="mt-0.5 flex-shrink-0" aria-hidden="true">
                     {viewMode === "documents" ? (
-                      <FileText className="w-4 h-4 text-cyan-400" />
+                      <FileText className="h-4 w-4 text-muted-foreground" />
                     ) : (
-                      <Code className="w-4 h-4 text-green-400" />
+                      <Code className="h-4 w-4 text-muted-foreground" />
                     )}
                   </div>
 
-                  {/* Content - Can shrink with proper overflow */}
-                  <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 min-w-0">
-                    <span className="text-sm font-medium text-white/90 truncate flex-1" title={getItemTitle(item)}>
-                      {getItemTitle(item)}
-                    </span>
-                    {viewMode === "code" && (item as CodeExample).language && (
-                      <span className="px-1.5 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400 text-xs rounded flex-shrink-0">
-                        {(item as CodeExample).language}
-                      </span>
-                    )}
-                    {viewMode === "code" &&
-                      (((item as CodeExample).metadata?.summary_pending ||
-                        (item as CodeExample).metadata?.summary_status === "pending" ||
-                        (item as CodeExample).summary === "Summary pending") && (
-                        <span className="px-1.5 py-0.5 bg-yellow-500/10 text-yellow-500 text-xs rounded flex-shrink-0">
-                          Summarizing
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 truncate font-medium">{getItemTitle(item)}</span>
+                      {viewMode === "code" && (item as CodeExample).language && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">
+                          {(item as CodeExample).language}
                         </span>
-                      ))}
-                  </div>
-                    <p className="text-xs text-gray-500 line-clamp-2" title={getItemDescription(item)}>
-                      {getItemDescription(item)}
-                    </p>
+                      )}
+                    </div>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">{getItemDescription(item)}</p>
                     {item.metadata?.relevance_score != null && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <Hash className="w-3 h-3 text-gray-600" aria-hidden="true" />
-                        <span className="text-xs text-gray-600">
-                          {(item.metadata.relevance_score * 100).toFixed(0)}%
-                        </span>
+                      <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Hash className="h-3 w-3" aria-hidden="true" />
+                        {(item.metadata.relevance_score * 100).toFixed(0)}%
                       </div>
                     )}
                   </div>
                 </div>
-              </motion.button>
+              </button>
             ))}
 
-            {/* Load More Button */}
             {hasNextPage && !isLoading && (
-              <div className="p-3 mt-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onLoadMore}
-                  disabled={isFetchingNextPage}
-                  className="w-full text-cyan-600 dark:text-cyan-400 hover:text-white dark:hover:text-white hover:bg-cyan-500/10 transition-all"
-                  aria-label={`Load more ${viewMode}`}
-                >
+              <div className="p-3">
+                <Button variant="outline" size="sm" onClick={onLoadMore} disabled={isFetchingNextPage} className="w-full">
                   {isFetchingNextPage ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
-                      <span>Loading...</span>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      Loading...
                     </>
                   ) : (
-                    <>
-                      <span>Load More {viewMode}</span>
-                      <span className="sr-only">. Press to load additional items.</span>
-                    </>
+                    <>Load more {viewMode}</>
                   )}
                 </Button>
               </div>
             )}
           </div>
         )}
-      </div>
+      </ScrollArea>
     </aside>
   );
 };

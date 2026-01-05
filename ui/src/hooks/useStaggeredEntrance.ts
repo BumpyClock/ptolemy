@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 /**
  * Custom hook for creating staggered entrance animations
- * @param items Array of items to animate
  * @param staggerDelay Delay between each item animation (in seconds)
  * @param forceReanimateCounter Optional counter to force reanimation when it changes
  * @returns Animation variants and props for Framer Motion
  */
-export const useStaggeredEntrance = <T,>(items: T[], staggerDelay: number = 0.15, forceReanimateCounter?: number) => {
+export const useStaggeredEntrance = (staggerDelay: number = 0.15, forceReanimateCounter?: number) => {
   const [isVisible, setIsVisible] = useState(false);
   useEffect(() => {
     // Set visible after component mounts for the animation to trigger

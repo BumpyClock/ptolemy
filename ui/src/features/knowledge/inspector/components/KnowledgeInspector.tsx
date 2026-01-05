@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { copyToClipboard } from "../../../shared/utils/clipboard";
-import { InspectorDialog, InspectorDialogContent, InspectorDialogTitle } from "../../../ui/primitives";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/Dialog";
 import type { CodeExample, DocumentChunk, InspectorSelectedItem, KnowledgeItem } from "../../types";
 import { useInspectorPagination } from "../hooks/useInspectorPagination";
 import { ContentViewer } from "./ContentViewer";
@@ -148,45 +148,42 @@ export const KnowledgeInspector: React.FC<KnowledgeInspectorProps> = ({
   }, []);
 
   return (
-    <InspectorDialog open={open} onOpenChange={onOpenChange}>
-      <InspectorDialogContent>
-        <InspectorDialogTitle>Knowledge Inspector - {item.title}</InspectorDialogTitle>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-6xl h-[80vh] p-0">
+        <DialogTitle className="sr-only">Knowledge Inspector - {item.title}</DialogTitle>
+        <div className="flex h-full flex-col">
+          <div className="flex-shrink-0">
+            <InspectorHeader
+              item={item}
+              viewMode={viewMode}
+              onViewModeChange={handleViewModeChange}
+              documentCount={totalDocumentCount}
+              codeCount={totalCodeCount}
+              filteredDocumentCount={viewMode === "documents" ? currentItems.length : 0}
+              filteredCodeCount={viewMode === "code" ? currentItems.length : 0}
+            />
+          </div>
 
-        {/* Header - Fixed */}
-        <div className="flex-shrink-0">
-          <InspectorHeader
-            item={item}
-            viewMode={viewMode}
-            onViewModeChange={handleViewModeChange}
-            documentCount={totalDocumentCount}
-            codeCount={totalCodeCount}
-            filteredDocumentCount={viewMode === "documents" ? currentItems.length : 0}
-            filteredCodeCount={viewMode === "code" ? currentItems.length : 0}
-          />
-        </div>
+          <div className="flex flex-1 min-h-0">
+            <InspectorSidebar
+              viewMode={viewMode}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              items={currentItems as DocumentChunk[] | CodeExample[]}
+              selectedItemId={selectedItem?.id || null}
+              onItemSelect={handleItemSelect}
+              isLoading={isLoading}
+              hasNextPage={hasNextPage}
+              onLoadMore={fetchNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+            />
 
-        {/* Main Content Area - Scrollable */}
-        <div className="flex flex-1 min-h-0">
-          {/* Sidebar */}
-          <InspectorSidebar
-            viewMode={viewMode}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            items={currentItems as DocumentChunk[] | CodeExample[]}
-            selectedItemId={selectedItem?.id || null}
-            onItemSelect={handleItemSelect}
-            isLoading={isLoading}
-            hasNextPage={hasNextPage}
-            onLoadMore={fetchNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-          />
-
-          {/* Content Viewer */}
-          <div className="flex-1 min-h-0 bg-black/20 flex flex-col">
-            <ContentViewer selectedItem={selectedItem} onCopy={handleCopy} copiedId={copiedId} />
+            <div className="flex-1 min-h-0 flex flex-col">
+              <ContentViewer selectedItem={selectedItem} onCopy={handleCopy} copiedId={copiedId} />
+            </div>
           </div>
         </div>
-      </InspectorDialogContent>
-    </InspectorDialog>
+      </DialogContent>
+    </Dialog>
   );
 };

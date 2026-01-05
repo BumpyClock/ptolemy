@@ -1,15 +1,11 @@
-/**
- * Content Viewer Component
- * Displays the selected document or code content
- */
-
 import { Check, Code, Copy, FileText, Layers, Loader2 } from "lucide-react";
 import Prism from "prismjs";
 import ReactMarkdown from "react-markdown";
-import { Button } from "../../../ui/primitives";
-import type { InspectorSelectedItem } from "../../types";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { ScrollArea } from "@/components/ui/ScrollArea";
+import type { CodeExampleMetadata, DocumentChunkMetadata, InspectorSelectedItem } from "../../types";
 
-// Import Prism theme and languages
 import "prismjs/themes/prism-tomorrow.css";
 import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-typescript";
@@ -27,222 +23,143 @@ interface ContentViewerProps {
 export const ContentViewer: React.FC<ContentViewerProps> = ({ selectedItem, onCopy, copiedId }) => {
   if (!selectedItem) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
+      <div className="flex-1 flex items-center justify-center text-muted-foreground">
         <div className="text-center">
-          <Layers className="w-12 h-12 mx-auto mb-3 opacity-50" />
+          <Layers className="mx-auto mb-3 h-12 w-12 opacity-50" />
           <p className="text-sm">Select an item to view</p>
         </div>
       </div>
     );
   }
 
-  // Highlight code with Prism
   const highlightCode = (code: string, language?: string): string => {
     try {
-      // Escape HTML entities FIRST per Prism documentation requirement
-      // Prism expects pre-escaped input to prevent XSS
       const escaped = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
       const lang = language?.toLowerCase() || "javascript";
       const grammar = Prism.languages[lang] || Prism.languages.javascript;
       return Prism.highlight(escaped, grammar, lang);
     } catch (error) {
       console.error("Prism highlighting failed:", error);
-      // Return escaped code on error
       return code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
   };
 
-  // Strip leading/trailing backticks from document content
   const stripOuterBackticks = (content: string) => {
     let cleaned = content.trim();
-
-    // Remove opening triple backticks (with optional language identifier)
     if (cleaned.startsWith("```")) {
       const firstNewline = cleaned.indexOf("\n");
-      if (firstNewline > 0) {
-        cleaned = cleaned.substring(firstNewline + 1);
-      }
+      if (firstNewline > 0) cleaned = cleaned.substring(firstNewline + 1);
     }
-
-    // Remove closing triple backticks
     if (cleaned.endsWith("```")) {
       const lastBackticks = cleaned.lastIndexOf("\n```");
-      if (lastBackticks > 0) {
-        cleaned = cleaned.substring(0, lastBackticks);
-      } else {
-        cleaned = cleaned.substring(0, cleaned.length - 3);
-      }
+      cleaned = lastBackticks > 0 ? cleaned.substring(0, lastBackticks) : cleaned.substring(0, cleaned.length - 3);
     }
-
     return cleaned.trim();
   };
 
-  const codeMetadata = selectedItem.type === "code"
-    ? (selectedItem.metadata as { summary?: string; summary_status?: string; summary_pending?: boolean } | undefined)
-    : undefined;
+  const documentMetadata = selectedItem.type === "document" ? (selectedItem.metadata as DocumentChunkMetadata | undefined) : undefined;
+  const codeMetadata = selectedItem.type === "code" ? (selectedItem.metadata as CodeExampleMetadata | undefined) : undefined;
   const isSummaryPending =
     codeMetadata?.summary_pending || codeMetadata?.summary_status === "pending" || codeMetadata?.summary === "Summary pending";
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Content Header - Fixed with proper overflow handling */}
-      <div className="p-4 border-b border-white/10 flex items-center gap-3 flex-shrink-0">
-        {/* Icon and Metadata - Allow to grow and shrink with min-w-0 for proper truncation */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {/* Icon - Fixed size, no shrink */}
-          <div className="flex-shrink-0">
-            {selectedItem.type === "document" ? (
-              <FileText className="w-5 h-5 text-cyan-400" />
-            ) : (
-              <Code className="w-5 h-5 text-green-400" />
-            )}
-          </div>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-3 border-b px-4 py-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          {selectedItem.type === "document" ? (
+            <FileText className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <Code className="h-5 w-5 text-muted-foreground" />
+          )}
 
-          {/* Metadata Content - Can shrink with proper overflow */}
           <div className="min-w-0 flex-1">
             {selectedItem.type === "document" ? (
               <>
-                <h4 className="text-sm font-medium text-white/90 truncate">
-                  {selectedItem.metadata && "title" in selectedItem.metadata
-                    ? selectedItem.metadata.title || "Document"
-                    : "Document"}
+                <h4 className="truncate text-sm font-medium">
+                  {documentMetadata?.title || "Document"}
                 </h4>
-                {selectedItem.metadata && "section" in selectedItem.metadata && selectedItem.metadata.section && (
-                  <p className="text-xs text-gray-500 truncate">{selectedItem.metadata.section}</p>
-                )}
+                {documentMetadata?.section && <p className="truncate text-xs text-muted-foreground">{documentMetadata.section}</p>}
               </>
             ) : (
               <>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={[
-                      "px-2 py-0.5 bg-green-500/10 text-green-600 dark:text-green-400",
-                      "text-xs font-mono rounded flex-shrink-0",
-                    ].join(" ")}
-                  >
-                    {selectedItem.type === "code" && selectedItem.metadata && "language" in selectedItem.metadata
-                      ? selectedItem.metadata.language || "unknown"
-                      : "unknown"}
-                  </span>
-                  {selectedItem.type === "code" &&
-                    selectedItem.metadata &&
-                    "file_path" in selectedItem.metadata &&
-                    selectedItem.metadata.file_path && (
-                      <span className="text-xs text-gray-500 font-mono truncate min-w-0">
-                        {selectedItem.metadata.file_path}
-                      </span>
-                    )}
+                <div className="flex min-w-0 items-center gap-2">
+                  <Badge variant="outline" className="text-xs font-mono">
+                    {codeMetadata?.language || "unknown"}
+                  </Badge>
+                  {codeMetadata?.file_path && (
+                    <span className="truncate text-xs text-muted-foreground">{codeMetadata.file_path}</span>
+                  )}
                 </div>
                 {selectedItem.type === "code" && isSummaryPending && (
-                  <p className="text-xs text-yellow-400 mt-1 line-clamp-2 flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" />
+                  <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
                     Summarizing code example...
                   </p>
                 )}
                 {selectedItem.type === "code" && !isSummaryPending && codeMetadata?.summary && (
-                  <p className="text-xs text-gray-400 mt-1 line-clamp-2">{codeMetadata.summary}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{codeMetadata.summary}</p>
                 )}
               </>
             )}
           </div>
         </div>
 
-        {/* Copy Button - Never shrinks, always visible */}
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => onCopy(selectedItem.content, selectedItem.id)}
-          className="text-gray-400 hover:text-white flex-shrink-0"
-        >
+        <Button variant="ghost" size="sm" onClick={() => onCopy(selectedItem.content, selectedItem.id)}>
           {copiedId === selectedItem.id ? (
             <>
-              <Check className="w-4 h-4 text-green-400 mr-1.5" />
-              <span className="text-xs">Copied!</span>
+              <Check className="mr-1.5 h-4 w-4 text-foreground" />
+              Copied
             </>
           ) : (
             <>
-              <Copy className="w-4 h-4 mr-1.5" />
-              <span className="text-xs">Copy</span>
+              <Copy className="mr-1.5 h-4 w-4" />
+              Copy
             </>
           )}
         </Button>
       </div>
 
-      {/* Content Body */}
-      <div className="flex-1 overflow-y-auto min-h-0 p-6 scrollbar-thin">
+      <ScrollArea className="flex-1 px-6 py-4">
         {selectedItem.type === "document" ? (
-          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-cyan-400 prose-a:text-cyan-400 prose-code:text-purple-400 prose-strong:text-white prose-pre:bg-black/30 prose-pre:border prose-pre:border-white/10">
-            <ReactMarkdown
-              components={{
-                p: ({ children }) => <p className="mb-4 leading-relaxed">{children}</p>,
-                h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-6">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-lg font-bold mb-3 mt-5">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-base font-semibold mb-2 mt-4">{children}</h3>,
-                ul: ({ children }) => <ul className="list-disc list-inside mb-4 space-y-1">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal list-inside mb-4 space-y-1">{children}</ol>,
-                li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                code: ({ children }) => <code className="px-1.5 py-0.5 rounded bg-black/30">{children}</code>,
-              }}
-            >
-              {stripOuterBackticks(selectedItem.content || "No content available")}
-            </ReactMarkdown>
-          </div>
+          <ReactMarkdown
+            components={{
+              p: ({ children }) => <p className="mb-4 text-sm leading-relaxed">{children}</p>,
+              h1: ({ children }) => <h1 className="mb-3 mt-6 text-lg font-semibold">{children}</h1>,
+              h2: ({ children }) => <h2 className="mb-3 mt-5 text-base font-semibold">{children}</h2>,
+              h3: ({ children }) => <h3 className="mb-2 mt-4 text-sm font-semibold">{children}</h3>,
+              ul: ({ children }) => <ul className="mb-4 list-disc space-y-1 pl-5 text-sm">{children}</ul>,
+              ol: ({ children }) => <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm">{children}</ol>,
+              li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+              code: ({ children }) => (
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{children}</code>
+              ),
+            }}
+          >
+            {stripOuterBackticks(selectedItem.content || "No content available")}
+          </ReactMarkdown>
         ) : (
           (() => {
-            // Extract language once
-            const language =
-              selectedItem.metadata && "language" in selectedItem.metadata
-                ? selectedItem.metadata.language || "javascript"
-                : "javascript";
-
+            const language = codeMetadata?.language || "javascript";
             return (
-              <div className="relative">
-                <pre
-                  className={[
-                    "bg-black/30 dark:bg-black/30 border border-cyan-500/10 rounded-lg p-4",
-                    "overflow-x-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent",
-                  ].join(" ")}
-                >
-                  <code
-                    className={`language-${language} font-mono text-sm leading-relaxed`}
-                    dangerouslySetInnerHTML={{
-                      __html: highlightCode(selectedItem.content || "// No code content available", language),
-                    }}
-                  />
-                </pre>
-              </div>
+              <pre className="rounded-lg border bg-muted/30 p-4 text-sm">
+                <code
+                  className={`language-${language} font-mono`}
+                  dangerouslySetInnerHTML={{
+                    __html: highlightCode(selectedItem.content || "// No code content available", language),
+                  }}
+                />
+              </pre>
             );
           })()
         )}
-      </div>
+      </ScrollArea>
 
-      {/* Content Footer - Show metadata */}
-      <div className="border-t border-white/10 flex-shrink-0">
-        <div className="px-4 py-3 flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center gap-4">
-            {selectedItem.metadata?.relevance_score != null && (
-              <span>
-                Relevance:{" "}
-                <span className="text-cyan-400">{(selectedItem.metadata.relevance_score * 100).toFixed(0)}%</span>
-              </span>
-            )}
-            {selectedItem.type === "document" &&
-              selectedItem.metadata &&
-              "url" in selectedItem.metadata &&
-              selectedItem.metadata.url && (
-                <a
-                  href={selectedItem.metadata.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-cyan-400 hover:text-cyan-300 transition-colors underline"
-                >
-                  View Source
-                </a>
-              )}
-          </div>
-          <span className="text-gray-600">{selectedItem.type === "document" ? "Document Chunk" : "Code Example"}</span>
-        </div>
+      <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+        {(documentMetadata?.relevance_score ?? codeMetadata?.relevance_score) != null && (
+          <span>
+            Relevance: {((documentMetadata?.relevance_score ?? codeMetadata?.relevance_score ?? 0) * 100).toFixed(0)}%
+          </span>
+        )}
       </div>
     </div>
   );

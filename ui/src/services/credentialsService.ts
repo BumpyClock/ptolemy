@@ -391,22 +391,24 @@ class CredentialsService {
       ENABLE_CODE_SUMMARIES: true,
       DEFER_CODE_SUMMARIES: false,
     };
+    const mutableSettings = settings as Record<keyof CodeExtractionSettings, number | boolean>;
 
     // Map credentials to settings
     codeExtractionCredentials.forEach((cred) => {
       if (cred.key in settings) {
         const key = cred.key as keyof CodeExtractionSettings;
-        if (typeof settings[key] === "number") {
+        const currentValue = mutableSettings[key];
+        if (typeof currentValue === "number") {
           if (key === "MAX_PROSE_RATIO") {
-            settings[key] = parseFloat(cred.value || "0.15");
+            mutableSettings[key] = parseFloat(cred.value || "0.15");
           } else {
-            settings[key] = parseInt(
-              cred.value || settings[key].toString(),
+            mutableSettings[key] = parseInt(
+              cred.value || currentValue.toString(),
               10,
             );
           }
-        } else if (typeof settings[key] === "boolean") {
-          settings[key] = cred.value === "true";
+        } else if (typeof currentValue === "boolean") {
+          mutableSettings[key] = cred.value === "true";
         }
       }
     });

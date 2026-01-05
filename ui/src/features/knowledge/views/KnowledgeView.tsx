@@ -139,10 +139,10 @@ export const KnowledgeView = () => {
         {hasActiveOperations && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white/90">Active Operations ({activeOperations.length})</h3>
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                <div className="w-2 h-2 bg-cyan-400 dark:bg-cyan-400 rounded-full animate-pulse" />
-                Live Updates
+              <h3 className="text-lg font-semibold">Active operations ({activeOperations.length})</h3>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                Live updates
               </div>
             </div>
             <CrawlingProgress onSwitchToBrowse={() => {}} />

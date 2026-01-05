@@ -1,35 +1,22 @@
-import { useState, useEffect } from "react";
-import {
-  Loader,
-  Settings,
-  ChevronDown,
-  ChevronUp,
-  Palette,
-  Key,
-  Brain,
-  Code,
-  Bug,
-  Info,
-  Database,
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useToast } from "../features/shared/hooks/useToast";
-import { useStaggeredEntrance } from "../hooks/useStaggeredEntrance";
-import { FeaturesSection } from "../components/settings/FeaturesSection";
-import { APIKeysSection } from "../components/settings/APIKeysSection";
-import { RAGSettings } from "../components/settings/RAGSettings";
-import { CodeExtractionSettings } from "../components/settings/CodeExtractionSettings";
-import { ButtonPlayground } from "../components/settings/ButtonPlayground";
-import { CollapsibleSettingsCard } from "../components/ui/CollapsibleSettingsCard";
-import { BugReportButton } from "../components/bug-report/BugReportButton";
+import { useEffect, useState } from "react";
+import { Settings } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useToast } from "@/features/shared/hooks/useToast";
+import { FeaturesSection } from "@/components/settings/FeaturesSection";
+import { APIKeysSection } from "@/components/settings/APIKeysSection";
+import { RAGSettings } from "@/components/settings/RAGSettings";
+import { CodeExtractionSettings } from "@/components/settings/CodeExtractionSettings";
+import { BugReportButton } from "@/components/bug-report/BugReportButton";
+import { UpdateBanner } from "@/features/settings/version/components/UpdateBanner";
+import { VersionStatusCard } from "@/features/settings/version/components/VersionStatusCard";
+import { MigrationStatusCard } from "@/features/settings/migrations/components/MigrationStatusCard";
+import { McpConfigSection } from "@/features/mcp/components/McpConfigSection";
+import { useMcpConfig, useMcpStatus } from "@/features/mcp/hooks";
 import {
   credentialsService,
   RagSettings,
   CodeExtractionSettings as CodeExtractionSettingsType,
-} from "../services/credentialsService";
-import { UpdateBanner } from "../features/settings/version/components/UpdateBanner";
-import { VersionStatusCard } from "../features/settings/version/components/VersionStatusCard";
-import { MigrationStatusCard } from "../features/settings/migrations/components/MigrationStatusCard";
+} from "@/services/credentialsService";
 
 export const SettingsPage = () => {
   const [ragSettings, setRagSettings] = useState<RagSettings>({
@@ -59,31 +46,23 @@ export const SettingsPage = () => {
     });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showButtonPlayground, setShowButtonPlayground] = useState(false);
 
   const { showToast } = useToast();
+  const { data: mcpStatus } = useMcpStatus();
+  const { data: mcpConfig } = useMcpConfig();
+  const safeMcpStatus = mcpStatus ?? { status: "stopped", uptime: null, logs: [] };
 
-  // Use staggered entrance animation
-  const { isVisible, containerVariants, itemVariants, titleVariants } =
-    useStaggeredEntrance([1, 2, 3, 4], 0.15);
-
-  // Load settings on mount
   useEffect(() => {
     loadSettings();
   }, []);
 
-  const loadSettings = async (isRetry = false) => {
+  const loadSettings = async () => {
     try {
       setLoading(true);
       setError(null);
-
-      // Load RAG settings
       const ragSettingsData = await credentialsService.getRagSettings();
       setRagSettings(ragSettingsData);
-
-      // Load Code Extraction settings
-      const codeExtractionSettingsData =
-        await credentialsService.getCodeExtractionSettings();
+      const codeExtractionSettingsData = await credentialsService.getCodeExtractionSettings();
       setCodeExtractionSettings(codeExtractionSettingsData);
     } catch (err) {
       setError("Failed to load settings");
@@ -96,196 +75,115 @@ export const SettingsPage = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader className="animate-spin text-gray-500" size={32} />
+      <div className="flex min-h-[400px] items-center justify-center text-sm text-muted-foreground">
+        Loading settings...
       </div>
     );
   }
 
   return (
-    <motion.div
-      initial="hidden"
-      animate={isVisible ? "visible" : "hidden"}
-      variants={containerVariants}
-      className="w-full"
-    >
-      {/* Update Banner */}
+    <div className="space-y-8">
       <UpdateBanner />
 
-      {/* Header */}
-      <motion.div
-        className="flex justify-between items-center mb-8"
-        variants={itemVariants}
-      >
-        <motion.h1
-          className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-3"
-          variants={titleVariants}
-        >
-          <Settings className="w-7 h-7 text-blue-500 filter drop-shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
-          Settings
-        </motion.h1>
-      </motion.div>
-
-
-      {/* Main content with two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column */}
-        <div className="space-y-6">
-          <motion.div variants={itemVariants}>
-            <CollapsibleSettingsCard
-              title="Features"
-              icon={Palette}
-              accentColor="purple"
-              storageKey="features"
-              defaultExpanded={true}
-            >
-              <FeaturesSection />
-            </CollapsibleSettingsCard>
-          </motion.div>
-
-          {/* Version Status */}
-          <motion.div variants={itemVariants}>
-            <CollapsibleSettingsCard
-              title="Version & Updates"
-              icon={Info}
-              accentColor="blue"
-              storageKey="version-status"
-              defaultExpanded={true}
-            >
-              <VersionStatusCard />
-            </CollapsibleSettingsCard>
-          </motion.div>
-
-          {/* Migration Status */}
-          <motion.div variants={itemVariants}>
-            <CollapsibleSettingsCard
-              title="Database Migrations"
-              icon={Database}
-              accentColor="purple"
-              storageKey="migration-status"
-              defaultExpanded={false}
-            >
-              <MigrationStatusCard />
-            </CollapsibleSettingsCard>
-          </motion.div>
-
-          
-        </div>
-
-        {/* Right Column */}
-        <div className="space-y-6">
-          <motion.div variants={itemVariants}>
-            <CollapsibleSettingsCard
-              title="API Keys"
-              icon={Key}
-              accentColor="pink"
-              storageKey="api-keys"
-              defaultExpanded={true}
-            >
-              <APIKeysSection />
-            </CollapsibleSettingsCard>
-          </motion.div>
-          <motion.div variants={itemVariants}>
-            <CollapsibleSettingsCard
-              title="RAG Settings"
-              icon={Brain}
-              accentColor="green"
-              storageKey="rag-settings"
-              defaultExpanded={true}
-            >
-              <RAGSettings
-                ragSettings={ragSettings}
-                setRagSettings={setRagSettings}
-              />
-            </CollapsibleSettingsCard>
-          </motion.div>
-          <motion.div variants={itemVariants}>
-            <CollapsibleSettingsCard
-              title="Code Extraction"
-              icon={Code}
-              accentColor="orange"
-              storageKey="code-extraction"
-              defaultExpanded={true}
-            >
-              <CodeExtractionSettings
-                codeExtractionSettings={codeExtractionSettings}
-                setCodeExtractionSettings={setCodeExtractionSettings}
-              />
-            </CollapsibleSettingsCard>
-          </motion.div>
-
-          {/* Bug Report Section */}
-          <motion.div variants={itemVariants}>
-            <CollapsibleSettingsCard
-              title="Bug Reporting"
-              icon={Bug}
-              iconColor="text-red-500"
-              borderColor="border-red-200 dark:border-red-800"
-              defaultExpanded={false}
-            >
-              <div className="space-y-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Found a bug or issue? Report it to help improve Ptolemy Beta.
-                </p>
-                <div className="flex justify-start">
-                  <BugReportButton variant="secondary" size="md">
-                    Report Bug
-                  </BugReportButton>
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                  <p>• Bug reports are sent directly to GitHub Issues</p>
-                  <p>• System context is automatically collected</p>
-                  <p>• Your privacy is protected - no personal data is sent</p>
-                </div>
-              </div>
-            </CollapsibleSettingsCard>
-          </motion.div>
-        </div>
+      <div className="flex items-center gap-3">
+        <Settings className="h-6 w-6 text-muted-foreground" />
+        <h1 className="text-2xl font-semibold">Settings</h1>
       </div>
 
-      {/* Button Playground Toggle - Subtle blue circle */}
-      <motion.div variants={itemVariants} className="mt-12 flex justify-center">
-        <button
-          onClick={() => setShowButtonPlayground(!showButtonPlayground)}
-          className="relative w-8 h-8 rounded-full border border-blue-400/30 bg-blue-500/5 hover:bg-blue-500/10 transition-all duration-200 flex items-center justify-center group"
-          title="Toggle Button Playground"
-        >
-          <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
-          <motion.div
-            animate={{ rotate: showButtonPlayground ? 180 : 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <ChevronDown className="w-4 h-4 text-blue-400/50" />
-          </motion.div>
-        </button>
-      </motion.div>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>General</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FeaturesSection />
+          </CardContent>
+        </Card>
 
-      {/* Button Playground - Collapsible */}
-      <AnimatePresence>
-        {showButtonPlayground && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3 }}
-            className="overflow-hidden"
-          >
-            <motion.div variants={itemVariants} className="mt-4">
-              <ButtonPlayground />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <Card>
+          <CardHeader>
+            <CardTitle>API Keys</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <APIKeysSection />
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Error Display */}
+      <Card>
+        <CardHeader>
+          <CardTitle>MCP Settings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <McpConfigSection config={mcpConfig} status={safeMcpStatus} />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-8 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>RAG Settings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RAGSettings ragSettings={ragSettings} setRagSettings={setRagSettings} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Code Extraction</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CodeExtractionSettings
+              codeExtractionSettings={codeExtractionSettings}
+              setCodeExtractionSettings={setCodeExtractionSettings}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Version & Updates</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <VersionStatusCard />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Database Migrations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MigrationStatusCard />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bug Reporting</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Found a bug or issue? Report it to help improve Ptolemy.
+          </p>
+          <BugReportButton variant="secondary">Report Bug</BugReportButton>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>• Bug reports are sent directly to GitHub Issues</p>
+            <p>• System context is automatically collected</p>
+            <p>• Your privacy is protected - no personal data is sent</p>
+          </div>
+        </CardContent>
+      </Card>
+
       {error && (
-        <motion.div
-          variants={itemVariants}
-          className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
-        >
-          <p className="text-red-600 dark:text-red-400">{error}</p>
-        </motion.div>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </div>
       )}
-    </motion.div>
+    </div>
   );
 };

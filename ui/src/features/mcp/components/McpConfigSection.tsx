@@ -3,7 +3,9 @@ import type React from "react";
 import { useState } from "react";
 import { useToast } from "@/features/shared/hooks";
 import { copyToClipboard } from "../../shared/utils/clipboard";
-import { Button, cn, glassmorphism, Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/primitives";
+import { Button } from "@/components/ui/Button";
+import { Kbd } from "@/components/ui/Kbd";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import type { McpServerConfig, McpServerStatus, SupportedIDE } from "../types";
 
 interface McpConfigSectionProps {
@@ -76,20 +78,19 @@ args = [
     'http://${config.host}:${config.port}/mcp'
 ]
 env = {
-    APPDATA = 'C:\\Users\\YOUR_USERNAME\\AppData\\Roaming',
-    LOCALAPPDATA = 'C:\\Users\\YOUR_USERNAME\\AppData\\Local',
-    SystemRoot = 'C:\\WINDOWS',
-    COMSPEC = 'C:\\WINDOWS\\system32\\cmd.exe'
+    APPDATA = 'C:\\\\Users\\\\YOUR_USERNAME\\\\AppData\\\\Roaming',
+    LOCALAPPDATA = 'C:\\\\Users\\\\YOUR_USERNAME\\\\AppData\\\\Local',
+    SystemRoot = 'C:\\\\WINDOWS',
+    COMSPEC = 'C:\\\\WINDOWS\\\\system32\\\\cmd.exe'
 }`;
-      } else {
-        return `[mcp_servers.ptolemy]
+      }
+      return `[mcp_servers.ptolemy]
 command = 'node'
 args = [
     '/usr/local/lib/node_modules/mcp-remote/dist/proxy.js',
     'http://${config.host}:${config.port}/mcp'
 ]
 env = { }`;
-      }
     },
     platformSpecific: true,
   },
@@ -189,15 +190,10 @@ export const McpConfigSection: React.FC<McpConfigSectionProps> = ({ config, stat
 
   if (status.status !== "running" || !config) {
     return (
-      <div
-        className={cn(
-          "p-6 text-center rounded-lg",
-          glassmorphism.background.subtle,
-          glassmorphism.border.default,
-          className,
-        )}
-      >
-        <p className="text-zinc-400">Start the MCP server to see configuration options</p>
+      <div className={className}>
+        <div className="rounded-lg border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+          Start the MCP server to see configuration options.
+        </div>
       </div>
     );
   }
@@ -215,9 +211,7 @@ export const McpConfigSection: React.FC<McpConfigSectionProps> = ({ config, stat
   };
 
   const handleCursorOneClick = () => {
-    const httpConfig = {
-      url: `http://${config.host}:${config.port}/mcp`,
-    };
+    const httpConfig = { url: `http://${config.host}:${config.port}/mcp` };
     const configString = JSON.stringify(httpConfig);
     const base64Config = btoa(configString);
     const deeplink = `cursor://anysphere.cursor-deeplink/mcp/install?name=ptolemy&config=${base64Config}`;
@@ -241,22 +235,14 @@ export const McpConfigSection: React.FC<McpConfigSectionProps> = ({ config, stat
   const configText = selectedConfig.configGenerator(config);
 
   return (
-    <div className={cn("space-y-6", className)}>
-      {/* Universal MCP Note */}
-      <div className={cn("p-3 rounded-lg", glassmorphism.background.blue, glassmorphism.border.blue)}>
-        <p className="text-sm text-blue-700 dark:text-blue-300">
-          <span className="font-semibold">Note:</span> Ptolemy works with any application that supports MCP. Below are
-          instructions for common tools, but these steps can be adapted for any MCP-compatible client.
-        </p>
+    <div className={className}>
+      <div className="mb-4 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">Note:</span> Ptolemy works with any application that supports
+        MCP. Below are instructions for common tools, but these steps can be adapted for any MCP-compatible client.
       </div>
 
-      {/* IDE Selection Tabs */}
-      <Tabs
-        defaultValue="claudecode"
-        value={selectedIDE}
-        onValueChange={(value) => setSelectedIDE(value as SupportedIDE)}
-      >
-        <TabsList className="grid grid-cols-3 lg:grid-cols-7 w-full">
+      <Tabs value={selectedIDE} onValueChange={(value) => setSelectedIDE(value as SupportedIDE)}>
+        <TabsList className="grid w-full grid-cols-3 gap-1 lg:grid-cols-7">
           <TabsTrigger value="claudecode">Claude Code</TabsTrigger>
           <TabsTrigger value="gemini">Gemini</TabsTrigger>
           <TabsTrigger value="codex">Codex</TabsTrigger>
@@ -267,20 +253,16 @@ export const McpConfigSection: React.FC<McpConfigSectionProps> = ({ config, stat
         </TabsList>
 
         <TabsContent value={selectedIDE} className="mt-6 space-y-4">
-          {/* Configuration Title and Steps */}
           <div>
-            <h4 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">{selectedConfig.title}</h4>
-            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600 dark:text-zinc-400">
+            <h4 className="text-lg font-semibold">{selectedConfig.title}</h4>
+            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
               {selectedConfig.steps.map((step) => {
-                // Highlight npm install command for Codex
                 if (selectedIDE === "codex" && step.includes("npm install -g mcp-remote")) {
                   const parts = step.split("npm install -g mcp-remote");
                   return (
                     <li key={step}>
                       {parts[0]}
-                      <code className="font-mono font-semibold bg-zinc-800 text-cyan-400 px-1.5 py-0.5 rounded">
-                        npm install -g mcp-remote
-                      </code>
+                      <Kbd>npm install -g mcp-remote</Kbd>
                       {parts[1]}
                     </li>
                   );
@@ -288,77 +270,40 @@ export const McpConfigSection: React.FC<McpConfigSectionProps> = ({ config, stat
                 return <li key={step}>{step}</li>;
               })}
             </ol>
-            {/* macOS note for Codex */}
-            {selectedIDE === "codex" && (
-              <p className="mt-2 text-sm text-gray-600 dark:text-zinc-400 italic">
-                Note: On macOS with Homebrew on Apple Silicon, the path might be{" "}
-                <code className="text-xs font-mono bg-zinc-800 px-1 rounded">
-                  /opt/homebrew/lib/node_modules/mcp-remote/dist/proxy.js
-                </code>
-              </p>
-            )}
           </div>
 
-          {/* Special Commands for Claude Code */}
           {selectedIDE === "claudecode" && (
-            <div
-              className={cn(
-                "p-3 rounded-lg flex items-center justify-between",
-                glassmorphism.background.subtle,
-                glassmorphism.border.default,
-              )}
-            >
-              <code className="text-sm font-mono text-cyan-600 dark:text-cyan-400">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 p-4">
+              <code className="text-xs text-muted-foreground">
                 claude mcp add --transport http ptolemy http://{config.host}:{config.port}/mcp
               </code>
               <Button variant="outline" size="sm" onClick={handleClaudeCodeCommand}>
-                <Copy className="w-3 h-3 mr-1" />
+                <Copy className="mr-1 h-3 w-3" />
                 Copy
               </Button>
             </div>
           )}
 
-          {/* Platform-specific note for Codex */}
-          {selectedIDE === "codex" && (
-            <div className={cn("p-3 rounded-lg", glassmorphism.background.yellow, glassmorphism.border.yellow)}>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                <span className="font-semibold">Platform Note:</span> The configuration below shows{" "}
-                {navigator.platform.toLowerCase().includes("win") ? "Windows" : "Linux/macOS"} format. Adjust paths
-                according to your system. This setup is complex right now because Codex has some bugs with MCP
-                currently.
-              </p>
-            </div>
-          )}
-
-          {/* Configuration Display */}
-          <div className={cn("relative rounded-lg p-4", glassmorphism.background.subtle, glassmorphism.border.default)}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                Configuration
-                {selectedIDE === "codex" && (
-                  <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400">
-                    ({navigator.platform.toLowerCase().includes("win") ? "Windows" : "Linux/macOS"})
-                  </span>
-                )}
-              </span>
+          <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Configuration</span>
               <Button variant="outline" size="sm" onClick={handleCopyConfig}>
-                <Copy className="w-3 h-3 mr-1" />
+                <Copy className="mr-1 h-3 w-3" />
                 Copy
               </Button>
             </div>
-            <pre className="text-xs font-mono text-gray-800 dark:text-zinc-200 overflow-x-auto">
+            <pre className="max-h-[320px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs">
               <code>{configText}</code>
             </pre>
           </div>
 
-          {/* One-Click Install for Cursor */}
           {selectedIDE === "cursor" && selectedConfig.supportsOneClick && (
-            <div className="flex items-center gap-3">
-              <Button variant="cyan" onClick={handleCursorOneClick} className="shadow-lg">
-                <ExternalLink className="w-4 h-4 mr-2" />
-                One-Click Install for Cursor
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={handleCursorOneClick}>
+                <ExternalLink className="mr-2 h-4 w-4" />
+                One-click install for Cursor
               </Button>
-              <span className="text-xs text-zinc-500">Opens Cursor with configuration</span>
+              <span className="text-xs text-muted-foreground">Opens Cursor with configuration</span>
             </div>
           )}
         </TabsContent>

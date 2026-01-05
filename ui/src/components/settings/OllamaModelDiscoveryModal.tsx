@@ -3,18 +3,17 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 // FORCE DEBUG - This should ALWAYS appear in console when this file loads
 console.log('🚨 DEBUG: OllamaModelDiscoveryModal.tsx file loaded at', new Date().toISOString());
 import { 
-  X, Search, Activity, Database, Zap, Clock, Server, 
-  Loader, CheckCircle, AlertCircle, Filter, Download,
+  Search, Activity, Database, Server, 
+  Loader, CheckCircle, AlertCircle,
   MessageCircle, Layers, Cpu, HardDrive
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { createPortal } from 'react-dom';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Badge } from '../ui/Badge';
 import { Card } from '../ui/Card';
 import { useToast } from '../../features/shared/hooks/useToast';
-import { ollamaService, type OllamaModel, type ModelDiscoveryResponse } from '../../services/ollamaService';
+import { ollamaService, type OllamaModel } from '../../services/ollamaService';
 import type { OllamaInstance, ModelSelectionState } from './types/OllamaTypes';
 
 interface OllamaModelDiscoveryModalProps {
@@ -562,54 +561,25 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const modalContent = (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) handleClose();
-        }}
-      >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="w-full max-w-4xl max-h-[85vh] mx-4 bg-white dark:bg-gray-900 rounded-xl shadow-2xl overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="border-b border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Database className="w-6 h-6 text-green-500" />
-                  Ollama Model Discovery
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Discover and select models from your Ollama instances
-                  {hasCache && lastDiscoveryTime && (
-                    <span className="ml-2 text-green-600 dark:text-green-400">
-                      (Cached {new Date(lastDiscoveryTime).toLocaleTimeString()})
-                    </span>
-                  )}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClose}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-w-4xl p-0">
+        <DialogHeader className="px-6 pt-6">
+          <DialogTitle className="flex items-center gap-2">
+            <Database className="w-5 h-5 text-muted-foreground" />
+            Ollama model discovery
+          </DialogTitle>
+          <DialogDescription>
+            Discover and select models from your Ollama instances.
+            {hasCache && lastDiscoveryTime && (
+              <span className="ml-2 text-muted-foreground">
+                (Cached {new Date(lastDiscoveryTime).toLocaleTimeString()})
+              </span>
+            )}
+          </DialogDescription>
+        </DialogHeader>
 
-          {/* Controls */}
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="border-t px-6 py-5">
             <div className="flex flex-col md:flex-row gap-4">
               {/* Search */}
               <div className="flex-1">
@@ -626,7 +596,7 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
               {/* Filters */}
               <div className="flex gap-2">
                 <Button
-                  variant={selectionState.showOnlyChat ? "solid" : "outline"}
+                  variant={selectionState.showOnlyChat ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectionState(prev => ({ 
                     ...prev, 
@@ -639,7 +609,7 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
                   Chat Only
                 </Button>
                 <Button
-                  variant={selectionState.showOnlyEmbedding ? "solid" : "outline"}
+                  variant={selectionState.showOnlyEmbedding ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectionState(prev => ({ 
                     ...prev, 
@@ -679,25 +649,24 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden border-t">
             {error ? (
               <div className="p-6 text-center">
-                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Discovery Failed</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+                <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">Discovery failed</h3>
+                <p className="text-muted-foreground mb-4">{error}</p>
                 <Button onClick={() => discoverModels(true)}>Try Again</Button>
               </div>
             ) : loading ? (
               <div className="p-6 text-center">
-                <Loader className="w-12 h-12 text-green-500 mx-auto mb-4 animate-spin" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Discovering Models</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-2">
+                <Loader className="w-12 h-12 text-muted-foreground mx-auto mb-4 animate-spin" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">Discovering models</h3>
+                <p className="text-muted-foreground mb-2">
                   {discoveryProgress || `Scanning ${enabledInstanceUrls.length} Ollama instances...`}
                 </p>
                 <div className="mt-4">
-                  <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div className="bg-green-500 h-full animate-pulse" style={{width: '100%'}}></div>
+                  <div className="bg-muted rounded-full h-2 overflow-hidden">
+                    <div className="bg-primary h-full animate-pulse" style={{width: '100%'}}></div>
                   </div>
                 </div>
               </div>
@@ -715,7 +684,7 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
                   return null;
                 })()}
                 {filteredAndSortedModels.length === 0 ? (
-                  <div className="text-center text-gray-500 dark:text-gray-400">
+                  <div className="text-center text-muted-foreground">
                     <Database className="w-16 h-16 mx-auto mb-4 opacity-50" />
                     <p className="text-lg font-medium mb-2">No models found</p>
                     <p className="text-sm">
@@ -736,27 +705,27 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
                       return (
                         <Card
                           key={modelKey}
-                          className={`p-4 hover:shadow-md transition-shadow ${
-                            isChatSelected || isEmbeddingSelected 
-                              ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
-                              : ''
+                          className={`p-4 transition-shadow ${
+                            isChatSelected || isEmbeddingSelected
+                              ? 'border-primary/40 bg-accent/40'
+                              : 'hover:bg-muted/40'
                           }`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-3 mb-2">
-                                <h4 className="font-semibold text-gray-900 dark:text-white">{model.name}</h4>
+                                <h4 className="font-semibold text-foreground">{model.name}</h4>
                                 
                                 {/* Capability badges */}
                                 <div className="flex gap-1">
                                   {model.capabilities.includes('chat') && (
-                                    <Badge variant="solid" className="bg-blue-100 text-blue-800 text-xs">
+                                    <Badge variant="secondary" className="text-xs">
                                       <MessageCircle className="w-3 h-3 mr-1" />
                                       Chat
                                     </Badge>
                                   )}
                                   {model.capabilities.includes('embedding') && (
-                                    <Badge variant="solid" className="bg-purple-100 text-purple-800 text-xs">
+                                    <Badge variant="secondary" className="text-xs">
                                       <Layers className="w-3 h-3 mr-1" />
                                       {model.embedding_dimensions}D
                                     </Badge>
@@ -764,7 +733,7 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
                                 <span className="flex items-center gap-1">
                                   <Server className="w-4 h-4" />
                                   {model.instanceName}
@@ -785,12 +754,12 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
                               {model.testResult && (
                                 <div className="flex gap-2 mb-2">
                                   {model.testResult.chatWorks && (
-                                    <Badge variant="solid" className="bg-green-100 text-green-800 text-xs">
+                                    <Badge variant="secondary" className="text-xs">
                                       ✓ Chat Verified
                                     </Badge>
                                   )}
                                   {model.testResult.embeddingWorks && (
-                                    <Badge variant="solid" className="bg-green-100 text-green-800 text-xs">
+                                    <Badge variant="secondary" className="text-xs">
                                       ✓ Embedding Verified ({model.testResult.dimensions}D)
                                     </Badge>
                                   )}
@@ -804,7 +773,7 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
                                 {model.capabilities.includes('chat') && (
                                   <Button
                                     size="sm"
-                                    variant={isChatSelected ? "solid" : "outline"}
+                                    variant={isChatSelected ? "default" : "outline"}
                                     onClick={() => handleModelSelect(model, 'chat')}
                                     className="text-xs"
                                   >
@@ -814,7 +783,7 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
                                 {model.capabilities.includes('embedding') && (
                                   <Button
                                     size="sm"
-                                    variant={isEmbeddingSelected ? "solid" : "outline"}
+                                    variant={isEmbeddingSelected ? "default" : "outline"}
                                     onClick={() => handleModelSelect(model, 'embedding')}
                                     className="text-xs"
                                   >
@@ -854,10 +823,9 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
             )}
           </div>
 
-          {/* Footer */}
-          <div className="border-t border-gray-200 dark:border-gray-700 p-6">
+          <div className="border-t p-6">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 {selectionState.selectedChatModel && (
                   <span className="mr-4">Chat: <strong>{selectionState.selectedChatModel}</strong></span>
                 )}
@@ -882,12 +850,9 @@ const OllamaModelDiscoveryModal: React.FC<OllamaModelDiscoveryModalProps> = ({
               </div>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+      </DialogContent>
+    </Dialog>
   );
-
-  return createPortal(modalContent, document.body);
 };
 
 export default OllamaModelDiscoveryModal;

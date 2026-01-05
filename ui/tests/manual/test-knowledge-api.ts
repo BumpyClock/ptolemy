@@ -8,15 +8,7 @@ process.env.NODE_ENV = 'test';
 process.env.PTOLEMY_SERVER_PORT = '8181';
 
 import { knowledgeService } from '../../src/features/knowledge/services/knowledgeService';
-import { progressService } from '../../src/features/knowledge/progress/services/progressService';
-
-// Ensure fetch in Node environments lacking global fetch
-if (typeof fetch === "undefined") {
-  // Use dynamic import for ESM compatibility
-  const { fetch: nodeFetch } = await import('node-fetch');
-  // @ts-expect-error: assign global
-  globalThis.fetch = nodeFetch as any;
-}
+import { progressService } from '../../src/features/progress/services/progressService';
 
 async function testKnowledgeAPI() {
   console.log('🧪 Testing Knowledge API Integration...\n');
@@ -64,7 +56,7 @@ async function testKnowledgeAPI() {
     // Test 5: Search
     console.log('🔎 Test 5: Searching knowledge base...');
     try {
-      const searchResults = await knowledgeService.searchKnowledgeBase({
+      await knowledgeService.searchKnowledgeBase({
         query: 'API',
         limit: 3,
       });

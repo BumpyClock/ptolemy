@@ -1,10 +1,8 @@
-/**
- * Banner component that shows when an update is available
- */
-
-import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpCircle, ExternalLink, X } from "lucide-react";
 import React from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { useVersionCheck } from "../hooks/useVersionQueries";
 
 export function UpdateBanner() {
@@ -17,54 +15,46 @@ export function UpdateBanner() {
   }
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.3 }}
-        className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-lg p-4 mb-6"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <ArrowUpCircle className="w-6 h-6 text-blue-400 animate-pulse" />
-            <div>
-              <h3 className="text-white font-semibold">Update Available: v{data.latest}</h3>
-              <p className="text-gray-400 text-sm mt-1">You are currently running v{data.current}</p>
-            </div>
+    <Card className="mb-6 border-dashed">
+      <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="rounded-md bg-primary/10 p-2 text-primary">
+            <ArrowUpCircle className="h-5 w-5" />
           </div>
-          <div className="flex items-center gap-2">
-            {data.release_url && (
-              <a
-                href={data.release_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 rounded-lg text-blue-400 transition-all duration-200"
-              >
-                <span className="text-sm font-medium">View Release</span>
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            )}
-            <a
-              href="https://github.com/coleam00/Ptolemy#upgrading"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 rounded-lg text-purple-400 transition-all duration-200"
-            >
-              <span className="text-sm font-medium">View Upgrade Instructions</span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-            <button
-              type="button"
-              onClick={() => setIsDismissed(true)}
-              className="p-2 hover:bg-gray-700/50 rounded-lg transition-colors"
-              aria-label="Dismiss update banner"
-            >
-              <X className="w-4 h-4 text-gray-400" />
-            </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold">Update available</h3>
+              <Badge variant="warning">v{data.latest}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">You are currently running v{data.current}</p>
           </div>
         </div>
-      </motion.div>
-    </AnimatePresence>
+        <div className="flex flex-wrap items-center gap-2">
+          {data.release_url && (
+            <Button asChild variant="outline" size="sm">
+              <a href={data.release_url} target="_blank" rel="noopener noreferrer">
+                View release
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+          )}
+          <Button asChild variant="outline" size="sm">
+            <a href="https://github.com/coleam00/Ptolemy#upgrading" target="_blank" rel="noopener noreferrer">
+              Upgrade guide
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsDismissed(true)}
+            aria-label="Dismiss update banner"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }

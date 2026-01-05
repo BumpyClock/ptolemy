@@ -9,9 +9,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "../primitives/alert-dialog";
-import { Button } from "../primitives/button";
-import { cn } from "../primitives/styles";
+} from "@/components/ui/AlertDialog";
+import { Button } from "@/components/ui/Button";
 
 interface DeleteConfirmModalProps {
   itemName: string;
@@ -49,69 +48,27 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
       `Are you sure you want to delete "${n}"? All associated documents and code examples will be permanently removed.`,
   };
 
-  // Size-specific styling for icon
-  const getIconStyles = () => {
-    switch (size) {
-      case "compact":
-        return { container: "w-8 h-8", icon: "w-4 h-4" };
-      case "large":
-        return { container: "w-16 h-16", icon: "w-8 h-8" };
-      default:
-        return { container: "w-12 h-12", icon: "w-6 h-6" };
-    }
-  };
-
-  const iconStyles = getIconStyles();
+  const iconSize = size === "compact" ? "h-4 w-4" : size === "large" ? "h-8 w-8" : "h-6 w-6";
+  const iconContainer = size === "compact" ? "h-8 w-8" : size === "large" ? "h-16 w-16" : "h-12 w-12";
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent
-        variant="destructive"
-        className={cn(
-          size === "compact" && "max-w-sm",
-          size === "large" && "max-w-lg",
-          !size || (size === "default" && "max-w-md"),
-        )}
-      >
+      <AlertDialogContent className={size === "compact" ? "max-w-sm" : size === "large" ? "max-w-lg" : "max-w-md"}>
         <AlertDialogHeader>
           <div className={`flex items-center gap-3 ${size === "compact" ? "mb-2" : "mb-3"}`}>
-            <div
-              className={cn(
-                iconStyles.container,
-                "rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center",
-              )}
-            >
-              <Trash2 className={cn(iconStyles.icon, "text-red-600 dark:text-red-400")} />
+            <div className={`${iconContainer} rounded-full bg-destructive/10 flex items-center justify-center`}>
+              <Trash2 className={`${iconSize} text-destructive`} />
             </div>
             <div>
-              <AlertDialogTitle
-                className={cn(
-                  size === "compact" && "text-base",
-                  size === "large" && "text-xl",
-                  !size || (size === "default" && "text-lg"),
-                )}
-              >
+              <AlertDialogTitle className={size === "compact" ? "text-base" : size === "large" ? "text-xl" : "text-lg"}>
                 {TITLES[type]}
               </AlertDialogTitle>
-              <AlertDialogDescription
-                className={cn(
-                  size === "compact" && "text-xs",
-                  size === "large" && "text-base",
-                  !size || (size === "default" && "text-sm"),
-                )}
-              >
+              <AlertDialogDescription className={size === "compact" ? "text-xs" : size === "large" ? "text-base" : "text-sm"}>
                 This action cannot be undone
               </AlertDialogDescription>
             </div>
           </div>
-          <p
-            className={cn(
-              "text-gray-700 dark:text-gray-300 mt-2 mb-4",
-              size === "compact" && "text-sm mb-3",
-              size === "large" && "text-base mb-5",
-              !size || (size === "default" && "text-base mb-4"),
-            )}
-          >
+          <p className={`${size === "compact" ? "text-sm mb-3" : size === "large" ? "text-base mb-5" : "text-base mb-4"}`}>
             {MESSAGES[type](itemName)}
           </p>
         </AlertDialogHeader>

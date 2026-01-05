@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Send, User, WifiOff, RefreshCw, BookOpen, Search } from 'lucide-react';
-import { PtolemyLoadingSpinner, EdgeLitEffect } from '../animations/Animations';
+import { Send, User, WifiOff, RefreshCw } from 'lucide-react';
+import { PtolemyLoadingSpinner } from '../animations/Animations';
 import { agentChatService, ChatMessage } from '../../services/agentChatService';
 
 /**
@@ -23,11 +23,11 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
   // State for input field, panel width, loading state, and dragging state
   const [inputValue, setInputValue] = useState('');
   const [width, setWidth] = useState(416); // Default width - increased by 30% from 320px
-  const [isTyping, setIsTyping] = useState(false);
+  const [isTyping] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [streamingMessage, setStreamingMessage] = useState<string>('');
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessage] = useState('');
+  const [isStreaming] = useState(false);
   
   // Add connection status state
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'connecting'>('connecting');
@@ -53,7 +53,7 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
         // Create a new chat session
         try {
           console.log(`[CHAT PANEL] Creating session with agentType: "rag"`);
-          const { session_id } = await agentChatService.createSession(undefined, 'rag');
+          const { session_id } = await agentChatService.createSession('rag');
           console.log(`[CHAT PANEL] Session created with ID: ${session_id}`);
           setSessionId(session_id);
           sessionIdRef.current = session_id;
@@ -197,7 +197,10 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
       };
       
       // Send message to agent via service
-      await agentChatService.sendMessage(sessionId, inputValue.trim(), context);
+      await agentChatService.sendMessage(sessionId, {
+        message: inputValue.trim(),
+        context,
+      });
       setInputValue('');
       setConnectionError(null);
     } catch (error) {
@@ -246,22 +249,18 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
       width: `${width}px`
     }} data-id={props['data-id']}>
       {/* Drag handle for resizing */}
-      <div ref={dragHandleRef} className={`absolute left-0 top-0 w-1.5 h-full cursor-ew-resize z-20 ${isDragging ? 'bg-blue-500/50' : 'bg-transparent hover:bg-blue-500/30'} transition-colors duration-200`} onMouseDown={handleDragStart} />
+      <div ref={dragHandleRef} className={`absolute left-0 top-0 w-1.5 h-full cursor-ew-resize z-20 ${isDragging ? 'bg-muted' : 'bg-transparent hover:bg-muted'} transition-colors duration-200`} onMouseDown={handleDragStart} />
       {/* Main panel with glassmorphism */}
-      <div className="h-full flex flex-col relative backdrop-blur-md bg-gradient-to-b from-white/80 to-white/60 dark:from-white/10 dark:to-black/30 border-l border-blue-200 dark:border-blue-500/30">
-        {/* Edgelit glow effect */}
-        <EdgeLitEffect color="blue" />
-        {/* Header gradient background */}
-        <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-blue-100 to-white dark:from-blue-500/20 dark:to-blue-500/5 rounded-t-md pointer-events-none"></div>
+      <div className="h-full flex flex-col relative bg-card border-l border-border">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-800/80">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex flex-col gap-2">
             <div className="flex items-center">
               {/* Ptolemy Logo - No animation in header */}
               <div className="relative w-8 h-8 mr-3 flex items-center justify-center">
                 <img src="/logo-neon.png" alt="Ptolemy" className="w-6 h-6 z-10 relative" />
               </div>
-              <h2 className="text-gray-800 dark:text-white font-medium z-10 relative">
+              <h2 className="text-foreground font-medium z-10 relative">
                 Knowledge Base Assistant
               </h2>
             </div>
@@ -272,14 +271,14 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
             {/* Connection status indicator */}
             {connectionStatus === 'offline' && (
               <div className="flex items-center gap-2">
-                <div className="flex items-center text-xs text-red-500 bg-red-100/80 dark:bg-red-900/30 px-2 py-1 rounded">
+                <div className="flex items-center text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
                   <WifiOff className="w-3 h-3 mr-1" />
                   Chat Offline
                 </div>
                 <button
                   onClick={handleReconnect}
                   disabled={isReconnecting}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 bg-blue-100/80 hover:bg-blue-200/80 dark:bg-blue-900/30 dark:hover:bg-blue-800/40 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 text-xs text-foreground bg-muted hover:bg-muted/80 px-2 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RefreshCw className={`w-3 h-3 ${isReconnecting ? 'animate-spin' : ''}`} />
                   {isReconnecting ? 'Connecting...' : 'Reconnect'}
@@ -288,7 +287,7 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
             )}
             
             {connectionStatus === 'connecting' && (
-              <div className="text-xs text-blue-500 bg-blue-100/80 dark:bg-blue-900/30 px-2 py-1 rounded">
+              <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                 <div className="flex items-center">
                   <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
                   Connecting...
@@ -297,9 +296,9 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
             )}
             
             {connectionStatus === 'online' && !connectionError && (
-              <div className="text-xs text-green-600 bg-green-100/80 dark:bg-green-900/30 px-2 py-1 rounded">
+              <div className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
                 <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-1" />
+                  <div className="w-2 h-2 bg-foreground rounded-full mr-1" />
                   Online
                 </div>
               </div>
@@ -307,21 +306,21 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
             
             {/* Error message overlay */}
             {connectionError && connectionStatus !== 'offline' && (
-              <div className="text-xs text-orange-600 bg-orange-100/80 dark:bg-orange-900/30 px-2 py-1 rounded">
+              <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded">
                 {connectionError}
               </div>
             )}
           </div>
         </div>
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50 dark:bg-transparent">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-background">
           {messages.map(message => (
             <div key={message.id} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`
                 max-w-[80%] rounded-lg p-3 
                 ${message.sender === 'user' 
-                  ? 'bg-purple-100/80 dark:bg-purple-500/20 border border-purple-200 dark:border-purple-500/30 ml-auto' 
-                  : 'bg-blue-100/80 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 mr-auto'}
+                  ? 'bg-secondary text-secondary-foreground border border-border ml-auto'
+                  : 'bg-muted text-foreground border border-border mr-auto'}
               `}>
                 <div className="flex items-center mb-1">
                   {message.sender === 'agent' ? (
@@ -329,13 +328,13 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
                       <img src="/logo-neon.png" alt="Ptolemy" className="w-full h-full" />
                     </div>
                   ) : (
-                    <User className="w-4 h-4 text-purple-500 mr-1" />
+                    <User className="w-4 h-4 text-muted-foreground mr-1" />
                   )}
-                  <span className="text-xs text-gray-500 dark:text-zinc-400">
+                  <span className="text-xs text-muted-foreground">
                     {formatTime(message.timestamp)}
                   </span>
                 </div>
-                <div className="text-gray-800 dark:text-white text-sm whitespace-pre-wrap">
+                <div className="text-foreground text-sm whitespace-pre-wrap">
                   {/* For RAG responses, handle markdown-style formatting */}
                   {message.agent_type === 'rag' && message.sender === 'agent' ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -367,17 +366,17 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
           {/* Streaming message */}
           {isStreaming && streamingMessage && (
             <div className="flex justify-start">
-              <div className="max-w-[80%] bg-blue-100/80 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 mr-auto rounded-lg p-3">
+              <div className="max-w-[80%] bg-muted text-foreground border border-border mr-auto rounded-lg p-3">
                 <div className="flex items-center mb-1">
                   <div className="w-4 h-4 mr-1 flex items-center justify-center">
                     <img src="/logo-neon.png" alt="Ptolemy" className="w-full h-full" />
                   </div>
-                  <span className="text-xs text-gray-500 dark:text-zinc-400">
+                  <span className="text-xs text-muted-foreground">
                     {formatTime(new Date())}
                   </span>
-                  <div className="ml-2 w-1 h-1 bg-blue-500 rounded-full animate-pulse" />
+                  <div className="ml-2 w-1 h-1 bg-foreground rounded-full animate-pulse" />
                 </div>
-                <p className="text-gray-800 dark:text-white text-sm whitespace-pre-wrap">
+                <p className="text-foreground text-sm whitespace-pre-wrap">
                   {streamingMessage}
                 </p>
               </div>
@@ -389,7 +388,7 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
             <div className="flex justify-start">
               <div className="max-w-[80%] mr-auto flex items-center justify-center py-4">
                 <PtolemyLoadingSpinner size="md" />
-                <span className="ml-2 text-sm text-gray-500 dark:text-zinc-400">
+                <span className="ml-2 text-sm text-muted-foreground">
                   Agent is typing...
                 </span>
               </div>
@@ -398,10 +397,10 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
           <div ref={messagesEndRef} />
         </div>
         {/* Input area */}
-        <div className="p-4 border-t border-gray-200 dark:border-zinc-800/80 bg-white/60 dark:bg-transparent">
+        <div className="p-4 border-t border-border bg-background">
           {connectionStatus === 'offline' && (
-            <div className="mb-3 p-3 bg-red-50/80 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 rounded-md">
-              <div className="flex items-center text-sm text-red-700 dark:text-red-300">
+            <div className="mb-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+              <div className="flex items-center text-sm text-destructive">
                 <WifiOff className="w-4 h-4 mr-2" />
                 Chat is currently offline. Please use the reconnect button above to try again.
               </div>
@@ -410,7 +409,7 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
           
           <div className="flex items-center gap-2">
             {/* Text input field */}
-            <div className="flex-1 backdrop-blur-md bg-gradient-to-b from-white/80 to-white/60 dark:from-white/10 dark:to-black/30 border border-gray-200 dark:border-zinc-800/80 rounded-md px-3 py-2 focus-within:border-blue-500 focus-within:shadow-[0_0_15px_rgba(59,130,246,0.5)] transition-all duration-200">
+            <div className="flex-1 bg-background border border-input rounded-md px-3 py-2 focus-within:ring-2 focus-within:ring-ring transition-all duration-200">
               <input 
                 type="text" 
                 value={inputValue} 
@@ -421,7 +420,7 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
                   "Search the knowledge base..."
                 }
                 disabled={connectionStatus !== 'online'} 
-                className="w-full bg-transparent text-gray-800 dark:text-white placeholder:text-gray-500 dark:placeholder:text-zinc-600 focus:outline-none disabled:opacity-50" 
+                className="w-full bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50" 
                 onKeyDown={e => {
                   if (e.key === 'Enter') handleSendMessage();
                 }} 
@@ -431,24 +430,9 @@ export const PtolemyChatPanel: React.FC<PtolemyChatPanelProps> = props => {
             <button 
               onClick={handleSendMessage} 
               disabled={connectionStatus !== 'online' || isTyping || !inputValue.trim()} 
-              className="relative flex items-center justify-center p-2 rounded-md overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center p-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {/* Glass background */}
-              <div className="absolute inset-0 backdrop-blur-md bg-gradient-to-b from-blue-100/80 to-blue-50/60 dark:from-white/5 dark:to-black/20 rounded-md"></div>
-              {/* Neon border glow */}
-              <div className={`absolute inset-0 rounded-md border-2 border-blue-400 ${
-                isTyping || connectionStatus !== 'online' ? 'opacity-30' : 'opacity-60 group-hover:opacity-100'
-              } shadow-[0_0_10px_rgba(59,130,246,0.3),inset_0_0_6px_rgba(59,130,246,0.2)] dark:shadow-[0_0_10px_rgba(59,130,246,0.6),inset_0_0_6px_rgba(59,130,246,0.4)] transition-all duration-300`}></div>
-              {/* Inner glow effect */}
-              <div className={`absolute inset-[1px] rounded-sm bg-blue-100/30 dark:bg-blue-500/10 ${
-                isTyping || connectionStatus !== 'online' ? 'opacity-20' : 'opacity-30 group-hover:opacity-40'
-              } transition-all duration-200`}></div>
-              {/* Send icon with neon glow */}
-              <Send className={`w-4 h-4 text-blue-500 dark:text-blue-400 relative z-10 ${
-                isTyping || connectionStatus !== 'online' ? 'opacity-50' : 'opacity-90 group-hover:opacity-100'
-              } drop-shadow-[0_0_3px_rgba(59,130,246,0.5)] dark:drop-shadow-[0_0_3px_rgba(59,130,246,0.8)] transition-all duration-200`} />
-              {/* Shine effect */}
-              <div className="absolute top-0 left-0 w-full h-[1px] bg-white/40 rounded-t-md"></div>
+              <Send className="w-4 h-4" />
             </button>
           </div>
         </div>

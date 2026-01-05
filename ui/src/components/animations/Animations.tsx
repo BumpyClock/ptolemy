@@ -72,18 +72,18 @@ export const NeonGlowEffect: React.FC<{
 }) => {
   // Color mappings for different neon colors
   const colorMap = {
-    cyan: 'border-cyan-400 shadow-cyan-400/50 dark:shadow-cyan-400/70',
-    fuchsia: 'border-fuchsia-400 shadow-fuchsia-400/50 dark:shadow-fuchsia-400/70',
-    blue: 'border-blue-400 shadow-blue-400/50 dark:shadow-blue-400/70',
-    purple: 'border-purple-500 shadow-purple-500/50 dark:shadow-purple-500/70',
-    green: 'border-emerald-500 shadow-emerald-500/50 dark:shadow-emerald-500/70',
-    pink: 'border-pink-500 shadow-pink-500/50 dark:shadow-pink-500/70'
+    cyan: 'border-border',
+    fuchsia: 'border-border',
+    blue: 'border-border',
+    purple: 'border-border',
+    green: 'border-border',
+    pink: 'border-border'
   };
   // Intensity mappings for glow strength
   const intensityMap = {
-    low: 'shadow-[0_0_5px_0]',
-    medium: 'shadow-[0_0_10px_1px]',
-    high: 'shadow-[0_0_15px_2px]'
+    low: '',
+    medium: '',
+    high: ''
   };
   return <div className={`relative ${className}`}>
       <div className={`absolute inset-0 rounded-md border ${colorMap[color]} ${intensityMap[intensity]}`}></div>
@@ -109,10 +109,10 @@ export const EdgeLitEffect: React.FC<{
 }) => {
   // Color mappings for different edge-lit colors
   const colorMap = {
-    blue: 'bg-blue-500 shadow-[0_0_10px_2px_rgba(59,130,246,0.4)] dark:shadow-[0_0_20px_5px_rgba(59,130,246,0.7)]',
-    purple: 'bg-purple-500 shadow-[0_0_10px_2px_rgba(168,85,247,0.4)] dark:shadow-[0_0_20px_5px_rgba(168,85,247,0.7)]',
-    green: 'bg-emerald-500 shadow-[0_0_10px_2px_rgba(16,185,129,0.4)] dark:shadow-[0_0_20px_5px_rgba(16,185,129,0.7)]',
-    pink: 'bg-pink-500 shadow-[0_0_10px_2px_rgba(236,72,153,0.4)] dark:shadow-[0_0_20px_5px_rgba(236,72,153,0.7)]'
+    blue: 'bg-border',
+    purple: 'bg-border',
+    green: 'bg-border',
+    pink: 'bg-border'
   };
   return <div className={`absolute top-0 left-0 w-full h-[2px] ${colorMap[color]} ${className}`}></div>;
 };

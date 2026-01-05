@@ -7,15 +7,14 @@
 import { Code, Download, Eye, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { DeleteConfirmModal } from "../../ui/components/DeleteConfirmModal";
-import { Button } from "../../ui/primitives/button";
+import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../../ui/primitives/dropdown-menu";
-import { cn } from "../../ui/primitives/styles";
+} from "@/components/ui/DropdownMenu";
 
 interface KnowledgeCardActionsProps {
   sourceId: string; // Source ID for API calls
@@ -98,12 +97,7 @@ export const KnowledgeCardActions: React.FC<KnowledgeCardActionsProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            className={cn(
-              "h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-white/10",
-              // Always visible for clearer affordance
-              "opacity-100",
-              (isRefreshing || isDeleting) && "opacity-100",
-            )}
+            className="h-8 w-8 p-0"
             disabled={isDeleting}
             title={isRefreshing ? "Recrawling..." : "More actions"}
           >
@@ -127,7 +121,7 @@ export const KnowledgeCardActions: React.FC<KnowledgeCardActionsProps> = ({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleRefresh} disabled={isRefreshing}>
-                <RefreshCw className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")} />
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
                 {isRefreshing ? "Recrawling..." : "Recrawl"}
               </DropdownMenuItem>
             </>
@@ -149,7 +143,7 @@ export const KnowledgeCardActions: React.FC<KnowledgeCardActionsProps> = ({
               <DropdownMenuItem
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="text-red-400 focus:text-red-400"
+                className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 {isDeleting ? "Deleting..." : "Delete"}

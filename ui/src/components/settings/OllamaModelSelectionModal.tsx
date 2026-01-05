@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { X, Search, RotateCcw, Zap, Server, Eye, Settings, Download, Box } from 'lucide-react';
+import { X, Search, RotateCcw, Zap, Eye, Settings, Download } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
 import { useToast } from '../../features/shared/hooks/useToast';
 
 interface ContextInfo {
@@ -19,6 +18,9 @@ interface ModelInfo {
   context_length?: number;
   context_info?: ContextInfo;
   embedding_dimensions?: number;
+  dimensions?: number;
+  block_count?: number;
+  attention_heads?: number;
   parameters?: string | {
     family?: string;
     parameter_size?: string;
@@ -60,15 +62,15 @@ interface CompatibilityBadgeProps {
 
 const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({ level, className = '' }) => {
   const badgeConfig = {
-    full: { color: 'bg-green-500', text: 'Ptolemy Ready', icon: '✓' },
-    partial: { color: 'bg-orange-500', text: 'Partial Support', icon: '◐' },
-    limited: { color: 'bg-red-500', text: 'Limited', icon: '◯' }
+    full: { text: 'Ptolemy Ready', icon: '✓' },
+    partial: { text: 'Partial Support', icon: '◐' },
+    limited: { text: 'Limited', icon: '◯' }
   };
 
   const config = badgeConfig[level];
 
   return (
-    <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium text-white ${config.color} ${className}`}>
+    <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border border-border bg-muted text-foreground ${className}`}>
       <span className="mr-1">{config.icon}</span>
       {config.text}
     </div>
@@ -77,22 +79,8 @@ const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({ level, classNam
 
 // Component to show embedding dimensions with color coding - positioned as badge in upper right
 const DimensionBadge: React.FC<{ dimensions: number }> = ({ dimensions }) => {
-  let colorClass = 'bg-blue-600';
-  
-  if (dimensions >= 3072) {
-    colorClass = 'bg-purple-600';
-  } else if (dimensions >= 1536) {
-    colorClass = 'bg-indigo-600';
-  } else if (dimensions >= 1024) {
-    colorClass = 'bg-green-600';
-  } else if (dimensions >= 768) {
-    colorClass = 'bg-yellow-600';
-  } else {
-    colorClass = 'bg-gray-600';
-  }
-
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium text-white ${colorClass}`}>
+    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium border border-border bg-muted text-foreground">
       {dimensions}D
     </span>
   );
@@ -118,12 +106,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
   });
 
   const getCardBorderColor = () => {
-    switch (model.ptolemy_compatibility) {
-      case 'full': return 'border-green-500/50';
-      case 'partial': return 'border-orange-500/50';
-      case 'limited': return 'border-red-500/50';
-      default: return 'border-gray-500/50';
-    }
+    return 'border-border';
   };
 
   const formatFileSize = (sizeInMB?: number) => {
@@ -182,10 +165,12 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
     return 'Unknown';
   };
 
+  const parameterDetails = typeof model.parameters === 'string' ? undefined : model.parameters;
+
   return (
     <div 
-      className={`relative bg-gray-800/50 rounded-xl p-4 border-2 transition-all duration-300 cursor-pointer hover:shadow-lg hover:scale-[1.02] ${
-        isSelected ? `${getCardBorderColor()} ring-2 ring-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.3)]` : `${getCardBorderColor()} hover:border-gray-600 hover:bg-gray-800/70`
+      className={`relative bg-card rounded-xl p-4 border transition-colors cursor-pointer ${
+        isSelected ? `${getCardBorderColor()} ring-1 ring-ring` : `${getCardBorderColor()} hover:bg-muted`
       }`}
       onClick={onSelect}
     >
@@ -203,9 +188,9 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
 
       {/* Model Name and Type */}
       <div className="mb-3">
-        <h3 className="text-white font-semibold text-lg mb-1">{model.name}</h3>
+        <h3 className="text-foreground font-semibold text-lg mb-1">{model.name}</h3>
         <div className="flex items-center justify-between">
-          <span className="text-gray-400 text-sm capitalize">{model.model_type}</span>
+          <span className="text-muted-foreground text-sm capitalize">{model.model_type}</span>
           
           {/* Capabilities Tags */}
           {model.capabilities && model.capabilities.length > 0 && (
@@ -213,7 +198,7 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
               {model.capabilities.map((capability: string) => (
                 <span
                   key={capability}
-                  className="px-2 py-1 bg-blue-600/20 border border-blue-500/30 rounded-md text-xs text-blue-300 font-medium"
+                  className="px-2 py-1 bg-muted border border-border rounded-md text-xs text-muted-foreground font-medium"
                 >
                   {capability}
                 </span>
@@ -225,38 +210,38 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
 
       {/* Model Description - only show if available */}
       {model.description && (
-        <p className="text-gray-400 text-sm mb-3 line-clamp-2">
+        <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
           {model.description}
         </p>
       )}
 
       {/* Performance Metrics - flexible layout */}
-      <div className="border-t border-gray-600 pt-3">
+      <div className="border-t border-border pt-3">
         <div className="flex flex-wrap gap-4 text-xs">
           {/* Context - only show for chat models */}
           {model.model_type === 'chat' && model.context_length && (
             <div className="flex items-center">
-              <Eye className="w-3 h-3 text-blue-400 mr-1" />
-              <span className="text-gray-300">Context: </span>
-              <span className="text-blue-400 ml-1">{formatContextDetails(model)}</span>
+              <Eye className="w-3 h-3 text-muted-foreground mr-1" />
+              <span className="text-muted-foreground">Context: </span>
+              <span className="text-foreground ml-1">{formatContextDetails(model)}</span>
             </div>
           )}
 
           {/* Size - only show if available */}
           {model.size_mb && (
             <div className="flex items-center">
-              <Download className="w-3 h-3 text-gray-400 mr-1" />
-              <span className="text-gray-300">Size: </span>
-              <span className="text-white ml-1">{formatFileSize(model.size_mb)}</span>
+              <Download className="w-3 h-3 text-muted-foreground mr-1" />
+              <span className="text-muted-foreground">Size: </span>
+              <span className="text-foreground ml-1">{formatFileSize(model.size_mb)}</span>
             </div>
           )}
 
           {/* Parameters - show if available */}
           {model.parameters && (
             <div className="flex items-center">
-              <Settings className="w-3 h-3 text-green-400 mr-1" />
-              <span className="text-gray-300">Params: </span>
-              <span className="text-green-400 ml-1">
+              <Settings className="w-3 h-3 text-muted-foreground mr-1" />
+              <span className="text-muted-foreground">Params: </span>
+              <span className="text-foreground ml-1">
                 {typeof model.parameters === 'object' 
                   ? `${model.parameters.parameter_size || 'Unknown size'} ${model.parameters.quantization ? `(${model.parameters.quantization})` : ''}`.trim()
                   : model.parameters
@@ -268,12 +253,12 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
           {/* Context Windows - show all 3 data points if available from real API data */}
           {model.context_info && (model.context_info.current || model.context_info.max || model.context_info.min) && (
             <div className="flex items-center flex-wrap gap-2">
-              <span className="w-3 h-3 text-blue-400 mr-1">📏</span>
+              <span className="w-3 h-3 text-muted-foreground mr-1">📏</span>
               <div className="flex gap-2 text-xs">
                 {model.context_info.current && (
                   <div>
-                    <span className="text-gray-400">Current: </span>
-                    <span className="text-blue-400">
+                    <span className="text-muted-foreground">Current: </span>
+                    <span className="text-foreground">
                       {model.context_info.current >= 1000000 
                         ? `${(model.context_info.current / 1000000).toFixed(1)}M`
                         : model.context_info.current >= 1000 
@@ -285,8 +270,8 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
                 )}
                 {model.context_info.max && model.context_info.max !== model.context_info.current && (
                   <div>
-                    <span className="text-gray-400">Max: </span>
-                    <span className="text-blue-400">
+                    <span className="text-muted-foreground">Max: </span>
+                    <span className="text-foreground">
                       {model.context_info.max >= 1000000 
                         ? `${(model.context_info.max / 1000000).toFixed(1)}M`
                         : model.context_info.max >= 1000 
@@ -298,8 +283,8 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
                 )}
                 {model.context_info.min && model.context_info.min !== model.context_info.current && model.context_info.min !== model.context_info.max && (
                   <div>
-                    <span className="text-gray-400">Base: </span>
-                    <span className="text-blue-400">
+                    <span className="text-muted-foreground">Base: </span>
+                    <span className="text-foreground">
                       {model.context_info.min >= 1000000 
                         ? `${(model.context_info.min / 1000000).toFixed(1)}M`
                         : model.context_info.min >= 1000 
@@ -316,27 +301,27 @@ const ModelCard: React.FC<ModelCardProps> = ({ model, isSelected, onSelect }) =>
           {/* Architecture - show if available */}
           {model.architecture && (
             <div className="flex items-center">
-              <span className="w-3 h-3 text-purple-400 mr-1">🏗️</span>
-              <span className="text-gray-300">Arch: </span>
-              <span className="text-purple-400 ml-1 capitalize">{model.architecture}</span>
+              <span className="w-3 h-3 text-muted-foreground mr-1">🏗️</span>
+              <span className="text-muted-foreground">Arch: </span>
+              <span className="text-foreground ml-1 capitalize">{model.architecture}</span>
             </div>
           )}
 
           {/* Format - show if available */}
-          {(model.format || model.parameters?.format) && (
+          {(model.format || parameterDetails?.format) && (
             <div className="flex items-center">
-              <span className="w-3 h-3 text-cyan-400 mr-1">📦</span>
-              <span className="text-gray-300">Format: </span>
-              <span className="text-cyan-400 ml-1 uppercase">{model.format || model.parameters?.format}</span>
+              <span className="w-3 h-3 text-muted-foreground mr-1">📦</span>
+              <span className="text-muted-foreground">Format: </span>
+              <span className="text-foreground ml-1 uppercase">{model.format || parameterDetails?.format}</span>
             </div>
           )}
 
           {/* Parent Model - show if available */}
           {model.parent_model && (
             <div className="flex items-center">
-              <span className="w-3 h-3 text-yellow-400 mr-1">🔗</span>
-              <span className="text-gray-300">Base: </span>
-              <span className="text-yellow-400 ml-1">{model.parent_model}</span>
+              <span className="w-3 h-3 text-muted-foreground mr-1">🔗</span>
+              <span className="text-muted-foreground">Base: </span>
+              <span className="text-foreground ml-1">{model.parent_model}</span>
             </div>
           )}
 
@@ -805,7 +790,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
 
         // Handle ModelDiscoveryResponse format
         const allModels = [
-          ...(data.chat_models || []).map(model => {
+          ...(data.chat_models || []).map((model: any) => {
             const compatibility = getPtolemyCompatibility(model, 'chat');
             
             // DEBUG: Log raw model data from API
@@ -853,7 +838,7 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
               parent_model: model.parent_model
             };
           }),
-          ...(data.embedding_models || []).map(model => {
+          ...(data.embedding_models || []).map((model: any) => {
             const compatibility = getPtolemyCompatibility(model, 'embedding');
             
             // DEBUG: Log raw embedding model data from API
@@ -939,18 +924,16 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }} onClick={onClose}>
-      <div className="bg-gray-900/95 border border-gray-800 rounded-xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        {/* Header with gradient accent line */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-green-500 via-blue-500 via-orange-500 to-purple-500 shadow-[0_0_20px_5px_rgba(59,130,246,0.5)]"></div>
+      <div className="bg-background border border-border rounded-xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <div>
-            <h2 className="text-xl font-semibold text-white flex items-center">
-              <Zap className="w-5 h-5 text-blue-400 mr-2" />
+            <h2 className="text-xl font-semibold text-foreground flex items-center">
+              <Zap className="w-5 h-5 text-muted-foreground mr-2" />
               Select Ollama Model
             </h2>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               Choose the best model for your needs ({modelType} models from {selectedInstanceUrl?.replace('http://', '') || 'all hosts'})
             </p>
           </div>
@@ -960,14 +943,13 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
               size="sm"
               onClick={refreshModels}
               disabled={refreshing}
-              className="text-blue-400 border-blue-400"
             >
               <RotateCcw className={`w-4 h-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="w-6 h-6" />
             </button>
@@ -975,43 +957,40 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
         </div>
 
         {/* Search and Filters */}
-        <div className="p-6 border-b border-gray-700">
+        <div className="p-6 border-b border-border">
           <div className="flex items-center gap-4 mb-4">
             {/* Search */}
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <input
                 type="text"
                 placeholder="Search models by name, description, or capabilities..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 bg-background border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
 
             {/* Sort Options */}
             <div className="flex gap-2">
               <Button
-                variant={sortBy === 'name' ? 'primary' : 'outline'}
+                variant={sortBy === 'name' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSortBy('name')}
-                className="text-white"
               >
                 Name
               </Button>
               <Button
-                variant={sortBy === 'context' ? 'primary' : 'outline'}
+                variant={sortBy === 'context' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSortBy('context')}
-                className="text-white"
               >
                 Context ↓
               </Button>
               <Button
-                variant={sortBy === 'performance' ? 'primary' : 'outline'}
+                variant={sortBy === 'performance' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSortBy('performance')}
-                className="text-white"
               >
                 Performance
               </Button>
@@ -1020,37 +999,33 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
 
           {/* Compatibility Filter */}
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-300">Ptolemy Compatibility:</span>
+            <span className="text-sm text-muted-foreground">Ptolemy Compatibility:</span>
             <div className="flex gap-2">
               <Button
-                variant={compatibilityFilter === 'all' ? 'primary' : 'outline'}
+                variant={compatibilityFilter === 'all' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setCompatibilityFilter('all')}
-                className="text-white"
               >
                 All
               </Button>
               <Button
-                variant={compatibilityFilter === 'full' ? 'primary' : 'outline'}
+                variant={compatibilityFilter === 'full' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setCompatibilityFilter('full')}
-                className="text-green-500 border-green-500"
               >
                 ● Full Support
               </Button>
               <Button
-                variant={compatibilityFilter === 'partial' ? 'primary' : 'outline'}
+                variant={compatibilityFilter === 'partial' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setCompatibilityFilter('partial')}
-                className="text-orange-500 border-orange-500"
               >
                 ◐ Partial
               </Button>
               <Button
-                variant={compatibilityFilter === 'limited' ? 'primary' : 'outline'}
+                variant={compatibilityFilter === 'limited' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setCompatibilityFilter('limited')}
-                className="text-red-500 border-red-500"
               >
                 ◯ Limited
               </Button>
@@ -1059,20 +1034,20 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
         </div>
 
         {/* Models Count and Cache Status */}
-        <div className="px-6 py-3 border-b border-gray-700">
+        <div className="px-6 py-3 border-b border-border">
           <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center text-orange-400">
+            <div className="flex items-center text-muted-foreground">
               <span className="mr-2">📋</span>
               {filteredModels.length} models found
             </div>
             {loadedFromCache && cacheTimestamp && (
-              <div className="flex items-center text-gray-400">
+              <div className="flex items-center text-muted-foreground">
                 <span className="mr-2">💾</span>
                 Cached at {cacheTimestamp}
               </div>
             )}
             {!loadedFromCache && !loading && (
-              <div className="flex items-center text-green-400">
+              <div className="flex items-center text-muted-foreground">
                 <span className="mr-2">🔄</span>
                 Fresh data
               </div>
@@ -1084,11 +1059,11 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="text-gray-400">Loading models...</div>
+              <div className="text-muted-foreground">Loading models...</div>
             </div>
           ) : filteredModels.length === 0 ? (
             <div className="flex items-center justify-center h-64">
-              <div className="text-center text-gray-400">
+              <div className="text-center text-muted-foreground">
                 <p className="mb-2">No models found</p>
                 <Button onClick={refreshModels} variant="outline" size="sm">
                   Refresh Models
@@ -1110,8 +1085,8 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-700 flex items-center justify-between">
-          <div className="text-sm text-gray-400">
+        <div className="p-6 border-t border-border flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
             {filteredModels.length > 0 && `${filteredModels.length} models available`}
           </div>
           <div className="flex gap-2">
@@ -1126,7 +1101,6 @@ export const OllamaModelSelectionModal: React.FC<OllamaModelSelectionModalProps>
                 }
               }}
               disabled={!selectedModel}
-              className="bg-blue-500 hover:bg-blue-600"
             >
               Select Model
             </Button>

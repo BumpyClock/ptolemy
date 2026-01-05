@@ -5,8 +5,8 @@ import { useBugReport } from "../../hooks/useBugReport";
 
 interface BugReportButtonProps {
   error?: Error;
-  variant?: "primary" | "secondary" | "ghost";
-  size?: "sm" | "md" | "lg";
+  variant?: "default" | "secondary" | "ghost" | "outline" | "destructive" | "link";
+  size?: "default" | "sm" | "lg" | "icon";
   className?: string;
   children?: React.ReactNode;
 }
@@ -14,7 +14,7 @@ interface BugReportButtonProps {
 export const BugReportButton: React.FC<BugReportButtonProps> = ({
   error,
   variant = "ghost",
-  size = "md",
+  size = "default",
   className = "",
   children,
 }) => {
