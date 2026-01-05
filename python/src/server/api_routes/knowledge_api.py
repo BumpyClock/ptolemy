@@ -477,65 +477,17 @@ async def get_knowledge_item_chunks(
 
         # Extract useful fields from metadata to top level for frontend
         # This ensures the API response matches the TypeScript DocumentChunk interface
+        from ..services.knowledge import KnowledgeItemService
+
         for chunk in chunks:
             metadata = chunk.get("metadata", {}) or {}
 
-            # Generate meaningful titles from available data
-            title = None
-
-            # Try to get title from various metadata fields
-            if metadata.get("filename"):
-                title = metadata.get("filename")
-            elif metadata.get("headers"):
-                title = metadata.get("headers").split(";")[0].strip("# ")
-            elif metadata.get("title") and metadata.get("title").strip():
-                title = metadata.get("title").strip()
-            else:
-                # Try to extract from content first for more specific titles
-                if chunk.get("content"):
-                    content = chunk.get("content", "").strip()
-                    # Look for markdown headers at the start
-                    lines = content.split("\n")[:5]
-                    for line in lines:
-                        line = line.strip()
-                        if line.startswith("# "):
-                            title = line[2:].strip()
-                            break
-                        elif line.startswith("## "):
-                            title = line[3:].strip()
-                            break
-                        elif line.startswith("### "):
-                            title = line[4:].strip()
-                            break
-
-                    # Fallback: use first meaningful line that looks like a title
-                    if not title:
-                        for line in lines:
-                            line = line.strip()
-                            # Skip code blocks, empty lines, and very short lines
-                            if (line and not line.startswith("```") and not line.startswith("Source:")
-                                and len(line) > 15 and len(line) < 80
-                                and not line.startswith("from ") and not line.startswith("import ")
-                                and "=" not in line and "{" not in line):
-                                title = line
-                                break
-
-                # If no content-based title found, generate from URL
-                if not title:
-                    url = chunk.get("url", "")
-                    if url:
-                        # Extract meaningful part from URL
-                        if url.endswith(".txt"):
-                            title = url.split("/")[-1].replace(".txt", "").replace("-", " ").title()
-                        else:
-                            # Get domain and path info
-                            parsed = urlparse(url)
-                            if parsed.path and parsed.path != "/":
-                                title = parsed.path.strip("/").replace("-", " ").replace("_", " ").title()
-                            else:
-                                title = parsed.netloc.replace("www.", "").title()
-
-            chunk["title"] = title or ""
+            # Generate meaningful title using the helper function
+            chunk["title"] = KnowledgeItemService.build_chunk_title(
+                metadata=metadata,
+                content=chunk.get("content"),
+                url=chunk.get("url")
+            )
             chunk["section"] = metadata.get("headers", "").replace(";", " > ") if metadata.get("headers") else None
             chunk["source_type"] = metadata.get("source_type")
             chunk["knowledge_type"] = metadata.get("knowledge_type")

@@ -252,12 +252,8 @@ class KnowledgeItemService:
                 f"Updating knowledge item | source_id={source_id} | updates={updates}"
             )
 
-            # Prepare update data
-            update_data = {}
-
-            # Handle title updates
-            if "title" in updates:
-                update_data["title"] = updates["title"]
+            # Extract title if present
+            title_update = updates.get("title")
 
             # Handle metadata updates
             metadata_fields = [
@@ -270,30 +266,19 @@ class KnowledgeItemService:
             ]
             metadata_updates = {k: v for k, v in updates.items() if k in metadata_fields}
 
-            if metadata_updates:
-                # Get current metadata
-                current_response = (
-                    self.supabase.table("ptolemy_sources")
-                    .select("metadata")
-                    .eq("source_id", source_id)
-                    .execute()
-                )
-                if current_response.data:
-                    current_metadata = current_response.data[0].get("metadata", {})
-                    current_metadata.update(metadata_updates)
-                    update_data["metadata"] = current_metadata
-                else:
-                    update_data["metadata"] = metadata_updates
+            # Use atomic RPC function to prevent race conditions
+            # This uses JSONB merge operator (||) for atomic updates
+            import json
+            result = self.supabase.rpc(
+                "ptolemy_update_source",
+                {
+                    "p_source_id": source_id,
+                    "p_title": title_update,
+                    "p_metadata_updates": json.dumps(metadata_updates) if metadata_updates else None,
+                }
+            ).execute()
 
-            # Perform the update
-            result = (
-                self.supabase.table("ptolemy_sources")
-                .update(update_data)
-                .eq("source_id", source_id)
-                .execute()
-            )
-
-            if result.data:
+            if result.data and len(result.data) > 0:
                 safe_logfire_info(f"Knowledge item updated successfully | source_id={source_id}")
                 return True, {
                     "success": True,
@@ -462,10 +447,10 @@ class KnowledgeItemService:
     async def _get_chunks_count(self, source_id: str) -> int:
         """Get the actual number of chunks for a source."""
         try:
-            # Count the actual rows in crawled_pages for this source
+            # Count-only query: use head=True to avoid fetching all rows
             result = (
                 self.supabase.table("ptolemy_crawled_pages")
-                .select("*", count="exact")
+                .select("id", count="exact", head=True)
                 .eq("source_id", source_id)
                 .execute()
             )
@@ -477,3 +462,83 @@ class KnowledgeItemService:
             # If we can't get chunk count, return 0
             safe_logfire_info(f"Failed to get chunk count for {source_id}: {e}")
             return 0
+
+    @staticmethod
+    def build_chunk_title(metadata: dict[str, Any] | None, content: str | None, url: str | None) -> str:
+        """
+        Generate a meaningful title for a document chunk.
+
+        Title derivation priority:
+        1. metadata.filename - if the chunk comes from a file
+        2. metadata.headers - first header extracted from content
+        3. metadata.title - explicit title field
+        4. Content analysis - first markdown header or meaningful line
+        5. URL fallback - derived from the URL path or domain
+
+        Args:
+            metadata: Chunk metadata dictionary
+            content: Chunk content text
+            url: URL of the chunk source
+
+        Returns:
+            A meaningful title string (empty string if none can be derived)
+        """
+        from urllib.parse import urlparse
+
+        metadata = metadata or {}
+        title = None
+
+        # Priority 1: filename from metadata
+        if metadata.get("filename"):
+            return metadata.get("filename")
+
+        # Priority 2: first header from headers metadata
+        if metadata.get("headers"):
+            return metadata.get("headers").split(";")[0].strip("# ")
+
+        # Priority 3: explicit title field
+        if metadata.get("title") and metadata.get("title").strip():
+            return metadata.get("title").strip()
+
+        # Priority 4: Extract from content
+        if content:
+            content = content.strip()
+            lines = content.split("\n")[:5]
+
+            # Look for markdown headers at the start
+            for line in lines:
+                line = line.strip()
+                if line.startswith("# "):
+                    title = line[2:].strip()
+                    break
+                elif line.startswith("## "):
+                    title = line[3:].strip()
+                    break
+                elif line.startswith("### "):
+                    title = line[4:].strip()
+                    break
+
+            # Fallback: use first meaningful line that looks like a title
+            if not title:
+                for line in lines:
+                    line = line.strip()
+                    # Skip code blocks, empty lines, and very short lines
+                    if (line and not line.startswith("```") and not line.startswith("Source:")
+                        and len(line) > 15 and len(line) < 80
+                        and not line.startswith("from ") and not line.startswith("import ")
+                        and "=" not in line and "{" not in line):
+                        title = line
+                        break
+
+        # Priority 5: Generate from URL if no content-based title found
+        if not title and url:
+            if url.endswith(".txt"):
+                title = url.split("/")[-1].replace(".txt", "").replace("-", " ").title()
+            else:
+                parsed = urlparse(url)
+                if parsed.path and parsed.path != "/":
+                    title = parsed.path.strip("/").replace("-", " ").replace("_", " ").title()
+                else:
+                    title = parsed.netloc.replace("www.", "").title()
+
+        return title or ""

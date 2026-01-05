@@ -572,6 +572,61 @@ COMMENT ON FUNCTION ptolemy_is_operation_cancelled IS 'Checks if cancellation ha
 COMMENT ON FUNCTION ptolemy_request_cancellation IS 'Requests cancellation of an active operation. Returns TRUE if successful.';
 COMMENT ON FUNCTION ptolemy_cleanup_old_operations IS 'Removes old completed/failed/cancelled operations. Default: 24 hours old.';
 
+-- Function to atomically update metadata using JSONB merge
+CREATE OR REPLACE FUNCTION ptolemy_update_source_metadata(
+    p_source_id TEXT,
+    p_metadata_updates JSONB
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_updated_metadata JSONB;
+BEGIN
+    UPDATE ptolemy_sources
+    SET metadata = COALESCE(metadata, '{}'::jsonb) || p_metadata_updates,
+        updated_at = NOW()
+    WHERE source_id = p_source_id
+    RETURNING metadata INTO v_updated_metadata;
+
+    RETURN v_updated_metadata;
+END;
+$$;
+
+COMMENT ON FUNCTION ptolemy_update_source_metadata IS 'Atomically merges metadata updates using JSONB || operator to prevent race conditions';
+
+-- Combined update function for both title and metadata
+CREATE OR REPLACE FUNCTION ptolemy_update_source(
+    p_source_id TEXT,
+    p_title TEXT DEFAULT NULL,
+    p_metadata_updates JSONB DEFAULT NULL
+)
+RETURNS TABLE (
+    source_id TEXT,
+    title TEXT,
+    metadata JSONB,
+    updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    UPDATE ptolemy_sources s
+    SET
+        title = COALESCE(p_title, s.title),
+        metadata = CASE
+            WHEN p_metadata_updates IS NOT NULL
+            THEN COALESCE(s.metadata, '{}'::jsonb) || p_metadata_updates
+            ELSE s.metadata
+        END,
+        updated_at = NOW()
+    WHERE s.source_id = p_source_id
+    RETURNING s.source_id, s.title, s.metadata, s.updated_at;
+END;
+$$;
+
+COMMENT ON FUNCTION ptolemy_update_source IS 'Atomically updates source title and/or metadata fields';
+
 -- =====================================================
 -- SECTION 4.6: MULTI-DIMENSIONAL EMBEDDING HELPER FUNCTIONS
 -- =====================================================
@@ -1293,7 +1348,8 @@ VALUES
   ('0.1.0', '3_fix_rls_policy_performance.sql'),
   ('0.1.0', '4_add_summary_count_rpcs.sql'),
   ('0.1.0', '5_add_sources_search_indexes.sql'),
-  ('0.1.0', '6_add_crawl_operations_table.sql')
+  ('0.1.0', '6_add_crawl_operations_table.sql'),
+  ('0.1.0', '7_add_atomic_metadata_update.sql')
 ON CONFLICT (version, migration_name) DO NOTHING;
 
 -- Enable Row Level Security on migrations table
