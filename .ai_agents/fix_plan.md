@@ -23,8 +23,7 @@ iteration. Do exactly one meaningful task per loop, then stop.
    .ai_agents/friday_mvp.md
 2. Do not assume missing. Before changing code, search to confirm it is not
    already implemented. Re-check if search is ambiguous or incomplete.
-3. Use subagents to keep primary context small: many for search/analysis, only
-   one for build/tests.
+3. Use subagents to keep primary context small: many for search/analysis, only one for build/tests.
 4. Full implementations only. No placeholders or stubs.
 5. TDD: for behavior changes, write a failing test first, then implement. If a
    test is not applicable, explain why in the loop output.
@@ -40,8 +39,8 @@ iteration. Do exactly one meaningful task per loop, then stop.
 11. You may add logging/diagnostics to loop back evidence when needed.
 12. If @fix_plan.md grows large, periodically prune completed items.
 13. Keep context small: summarize logs and avoid pasting large outputs.
-14. When a task is done and all tests pass, mark it complete in @fix_plan.md. Then commit the change with a clear
-    message. Do not push.
+14. When a task is done and all tests pass, mark it complete in @fix_plan.md. Then commit the change with a clear message. Do not push.
+15. Output <promise>GOT EM</promise> when all tasks in @fix_plan.md are complete and things align with specs in .ai_agents/specs/merge_topics.md.
 
 ## Project invariants (strict)
 - Obey any constraints in .ai_agents/specs/merge_topics.md and @AGENT.md as hard requirements.
@@ -68,15 +67,20 @@ iteration. Do exactly one meaningful task per loop, then stop.
 - [ ] Topic → source_ids expansion done in app code (RPC later if needed).
 - [ ] Per-source metadata = hybrid (global page metadata + per-source in join table).
 
-## 1) Migrations & Schema
-- [ ] Add `ptolemy_topics` table (id, name, description?, related_topic_ids?, created_at, updated_at).
-- [ ] Add `ptolemy_topic_sources` join table with unique constraint on `source_id` (v1 single-topic).
-- [ ] Add `canonical_url` to `ptolemy_page_metadata` (unique + index).
-- [ ] Add `canonical_url` to `ptolemy_crawled_pages` (index).
-- [ ] Add `ptolemy_page_sources` join table (page_id, source_id, unique composite index).
-- [ ] Replace chunk uniqueness from `(url, chunk_number)` → `(page_id, chunk_number)`.
-- [ ] Add/update indexes for `canonical_url`, `page_id`, and topic/source joins.
-- [ ] Add/adjust RLS policies for new tables (match existing patterns).
+## 1) Migrations & Schema ✅ COMPLETE
+- [x] Add `ptolemy_topics` table (id, name, description?, related_topic_ids?, created_at, updated_at).
+- [x] Add `ptolemy_topic_sources` join table with unique constraint on `source_id` (v1 single-topic).
+- [x] Add `canonical_url` to `ptolemy_page_metadata` (unique + index).
+- [x] Add `canonical_url` to `ptolemy_crawled_pages` (index).
+- [x] Add `ptolemy_page_sources` join table (page_id, source_id, unique composite index).
+- [x] Replace chunk uniqueness from `(url, chunk_number)` → `(page_id, chunk_number)`.
+- [x] Add/update indexes for `canonical_url`, `page_id`, and topic/source joins.
+- [x] Add/adjust RLS policies for new tables (match existing patterns).
+- [x] Added 3 helper functions: ptolemy_get_topic_sources, ptolemy_get_topic_pages, ptolemy_move_source_to_topic.
+
+**Migration files:**
+- `migration/9_add_topics_and_canonical_dedupe.sql` - incremental migration
+- `migration/complete_setup.sql` - updated Section 4.7 for fresh installs
 
 ## 2) Canonicalization Rules
 - [ ] Implement canonical URL helper (reuse generate_unique_source_id rules).

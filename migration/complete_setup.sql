@@ -746,6 +746,187 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- =====================================================
+-- SECTION 4.7: TOPICS AND CANONICAL URL DEDUPE
+-- =====================================================
+
+-- Topics table for grouping related sources
+CREATE TABLE IF NOT EXISTS ptolemy_topics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    related_topic_ids UUID[] DEFAULT '{}',  -- Soft relationships for UX only
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+
+    CONSTRAINT ptolemy_topics_name_unique UNIQUE(name)
+);
+
+-- Indexes for topics
+CREATE INDEX IF NOT EXISTS idx_ptolemy_topics_name ON ptolemy_topics(name);
+CREATE INDEX IF NOT EXISTS idx_ptolemy_topics_created_at ON ptolemy_topics(created_at);
+
+-- Trigger to update updated_at timestamp
+CREATE TRIGGER update_ptolemy_topics_updated_at
+    BEFORE UPDATE ON ptolemy_topics
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Topic-source join table (v1: one topic per source)
+CREATE TABLE IF NOT EXISTS ptolemy_topic_sources (
+    topic_id UUID NOT NULL REFERENCES ptolemy_topics(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES ptolemy_sources(source_id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+
+    PRIMARY KEY (topic_id, source_id),
+    CONSTRAINT ptolemy_topic_sources_source_unique UNIQUE(source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ptolemy_topic_sources_topic_id ON ptolemy_topic_sources(topic_id);
+CREATE INDEX IF NOT EXISTS idx_ptolemy_topic_sources_source_id ON ptolemy_topic_sources(source_id);
+
+-- Page-source provenance join table
+CREATE TABLE IF NOT EXISTS ptolemy_page_sources (
+    page_id UUID NOT NULL REFERENCES ptolemy_page_metadata(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES ptolemy_sources(source_id) ON DELETE CASCADE,
+    first_seen_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    last_seen_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+
+    PRIMARY KEY (page_id, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ptolemy_page_sources_page_id ON ptolemy_page_sources(page_id);
+CREATE INDEX IF NOT EXISTS idx_ptolemy_page_sources_source_id ON ptolemy_page_sources(source_id);
+
+-- Add canonical_url to ptolemy_page_metadata
+ALTER TABLE ptolemy_page_metadata
+ADD COLUMN IF NOT EXISTS canonical_url TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ptolemy_page_metadata_canonical_url_unique
+    ON ptolemy_page_metadata(canonical_url)
+    WHERE canonical_url IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ptolemy_page_metadata_canonical_url
+    ON ptolemy_page_metadata(canonical_url);
+
+-- Add canonical_url to ptolemy_crawled_pages
+ALTER TABLE ptolemy_crawled_pages
+ADD COLUMN IF NOT EXISTS canonical_url TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_ptolemy_crawled_pages_canonical_url
+    ON ptolemy_crawled_pages(canonical_url);
+
+-- Update chunk uniqueness constraint (page_id, chunk_number)
+ALTER TABLE ptolemy_crawled_pages
+DROP CONSTRAINT IF EXISTS ptolemy_crawled_pages_url_chunk_number_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ptolemy_crawled_pages_page_chunk_unique
+    ON ptolemy_crawled_pages(page_id, chunk_number)
+    WHERE page_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ptolemy_crawled_pages_url_chunk_fallback
+    ON ptolemy_crawled_pages(url, chunk_number)
+    WHERE page_id IS NULL;
+
+-- Enable RLS on new tables
+ALTER TABLE ptolemy_topics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ptolemy_topic_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ptolemy_page_sources ENABLE ROW LEVEL SECURITY;
+
+-- RLS policies for ptolemy_topics
+CREATE POLICY "Allow service role full access to ptolemy_topics" ON ptolemy_topics
+    FOR ALL TO service_role
+    USING (true);
+
+CREATE POLICY "Allow authenticated users to access ptolemy_topics" ON ptolemy_topics
+    FOR ALL TO authenticated
+    USING (true);
+
+-- RLS policies for ptolemy_topic_sources
+CREATE POLICY "Allow service role full access to ptolemy_topic_sources" ON ptolemy_topic_sources
+    FOR ALL TO service_role
+    USING (true);
+
+CREATE POLICY "Allow authenticated users to access ptolemy_topic_sources" ON ptolemy_topic_sources
+    FOR ALL TO authenticated
+    USING (true);
+
+-- RLS policies for ptolemy_page_sources
+CREATE POLICY "Allow service role full access to ptolemy_page_sources" ON ptolemy_page_sources
+    FOR ALL TO service_role
+    USING (true);
+
+CREATE POLICY "Allow authenticated users to access ptolemy_page_sources" ON ptolemy_page_sources
+    FOR ALL TO authenticated
+    USING (true);
+
+-- Helper function: get sources for a topic
+CREATE OR REPLACE FUNCTION ptolemy_get_topic_sources(p_topic_id UUID)
+RETURNS TABLE(source_id TEXT, source_url TEXT, source_display_name TEXT)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT s.source_id, s.source_url, s.source_display_name
+    FROM ptolemy_sources s
+    JOIN ptolemy_topic_sources ts ON ts.source_id = s.source_id
+    WHERE ts.topic_id = p_topic_id
+    ORDER BY s.source_display_name;
+$$;
+
+-- Helper function: get deduped pages for a topic
+CREATE OR REPLACE FUNCTION ptolemy_get_topic_pages(p_topic_id UUID)
+RETURNS TABLE(
+    page_id UUID,
+    canonical_url TEXT,
+    url TEXT,
+    section_title TEXT,
+    word_count INT,
+    chunk_count INT,
+    source_count BIGINT
+)
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT DISTINCT ON (pm.id)
+        pm.id as page_id,
+        pm.canonical_url,
+        pm.url,
+        pm.section_title,
+        pm.word_count,
+        pm.chunk_count,
+        (SELECT COUNT(DISTINCT ps2.source_id) FROM ptolemy_page_sources ps2 WHERE ps2.page_id = pm.id) as source_count
+    FROM ptolemy_page_metadata pm
+    JOIN ptolemy_page_sources ps ON ps.page_id = pm.id
+    JOIN ptolemy_topic_sources ts ON ts.source_id = ps.source_id
+    WHERE ts.topic_id = p_topic_id
+    ORDER BY pm.id, pm.updated_at DESC;
+$$;
+
+-- Helper function: move a source to a different topic
+CREATE OR REPLACE FUNCTION ptolemy_move_source_to_topic(p_source_id TEXT, p_new_topic_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    DELETE FROM ptolemy_topic_sources WHERE source_id = p_source_id;
+    INSERT INTO ptolemy_topic_sources (topic_id, source_id)
+    VALUES (p_new_topic_id, p_source_id);
+    RETURN TRUE;
+EXCEPTION WHEN OTHERS THEN
+    RETURN FALSE;
+END;
+$$;
+
+-- Comments
+COMMENT ON TABLE ptolemy_topics IS 'Topic definitions for grouping related sources';
+COMMENT ON TABLE ptolemy_topic_sources IS 'Join table mapping sources to topics (v1: one topic per source)';
+COMMENT ON TABLE ptolemy_page_sources IS 'Tracks which sources reference each canonical page (provenance)';
+COMMENT ON COLUMN ptolemy_page_metadata.canonical_url IS 'Normalized URL for deduplication (preserves fragments for llms-full sections)';
+COMMENT ON COLUMN ptolemy_crawled_pages.canonical_url IS 'Normalized URL matching the parent page canonical_url';
+COMMENT ON FUNCTION ptolemy_get_topic_sources IS 'Returns all sources belonging to a topic';
+COMMENT ON FUNCTION ptolemy_get_topic_pages IS 'Returns deduplicated pages for a topic with source count';
+COMMENT ON FUNCTION ptolemy_move_source_to_topic IS 'Moves a source from its current topic to a new topic';
+
+-- =====================================================
 -- SECTION 5: SEARCH FUNCTIONS
 -- =====================================================
 
