@@ -1,6 +1,6 @@
 # Ptolemy
 
-Ptolemy is a trimmed-down knowledge MCP focused on RAG search and knowledge base management.
+Ptolemy is a trimmed-down knowledge MCP focused on RAG search and knowledge base management. It was originally a fork of Archon but has since diverge significantly. The focus is entirely on providing a reliable knowledge base for your coding agents with simple and reliable tools that help them discover the right information quickly. 
 
 ## Services
 - **API server**: FastAPI backend for knowledge base, crawling, RAG, settings, providers, progress.
