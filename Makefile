@@ -5,7 +5,7 @@ SHELL := /bin/bash
 # Docker compose command - prefer newer 'docker compose' plugin over standalone 'docker-compose'
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
-.PHONY: help dev dev-docker dev-docker-full stop test test-fe test-be lint lint-fe lint-be clean install check
+.PHONY: help dev dev-docker dev-docker-full stop test test-fe test-fe-run test-be lint lint-fe lint-be check-fe check-be typecheck-be clean install check
 
 help:
 	@echo "Ptolemy Development Commands"
@@ -21,14 +21,18 @@ help:
 	@echo "  make lint-fe                - Run frontend linter only"
 	@echo "  make lint-be                - Run backend linter only"
 	@echo "  make clean                  - Remove containers and volumes"
-	@echo "  make install                - Install dependencies"
+	@echo "  make install                - Install dependencies from existing locks"
+	@echo "  make check-fe               - Read-only ESLint, Biome and TypeScript checks"
+	@echo "  make check-be               - Read-only Ruff lint and format checks"
+	@echo "  make typecheck-be           - Read-only existing Python source typecheck"
+	@echo "  make test-fe-run            - Run frontend tests once (backend gates still apply)"
 	@echo "  make check                  - Check environment setup"
 
 # Install dependencies
 install:
 	@echo "Installing dependencies..."
-	@cd ui && npm install
-	@cd python && uv sync --group all --group dev
+	@cd ui && npm ci --no-audit --no-fund
+	@cd python && uv sync --locked --group all --group dev
 	@echo "✓ Dependencies installed"
 
 # Check environment
@@ -87,6 +91,10 @@ test-fe:
 	@echo "Running frontend tests..."
 	@cd ui && npm test
 
+# Deterministic frontend test entry; provision backend-dependent tests separately.
+test-fe-run:
+	@cd ui && npm run test:run
+
 # Run backend tests
 test-be:
 	@echo "Running backend tests..."
@@ -104,6 +112,19 @@ lint-fe:
 lint-be:
 	@echo "Linting backend..."
 	@cd python && uv run ruff check --fix
+
+# Read-only automation targets; existing interactive lint-be remains an explicit autofix.
+check-fe:
+	@cd ui && npm run lint
+	@cd ui && npm run biome:ci
+	@cd ui && npm run typecheck
+
+check-be:
+	@cd python && UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=never uv run --locked --no-sync ruff check .
+	@cd python && UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=never uv run --locked --no-sync ruff format --check .
+
+typecheck-be:
+	@cd python && UV_OFFLINE=1 UV_PYTHON_DOWNLOADS=never uv run --locked --no-sync mypy src/
 
 # Clean everything (with confirmation)
 clean:

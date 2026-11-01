@@ -59,6 +59,28 @@ Ptolemy uses true microservices architecture with clear separation of concerns:
 - (Optional) [Make](https://www.gnu.org/software/make/) for simplified workflows
 - Basic knowledge of Python (FastAPI) and TypeScript (React)
 
+### Reproducible local checks
+
+Prepared-tool baseline uses Node 24.22.1 (`.nvmrc`), npm 11.19.1, Python 3.12.3 (`python/.python-version`) and uv 0.12.0 (enforced by `python/pyproject.toml`). Install these explicitly before running setup. Existing Python Docker recipes pin the same uv version so a cached older bootstrap cannot conflict with the project requirement. Container builds, runtime dependencies and browser/model installation remain separate qualification gates. No credentials, services or models are needed for static checks.
+
+```bash
+nvm use
+make install
+make check-fe
+make check-be
+make typecheck-be
+```
+
+`make install` uses `npm ci --no-audit --no-fund` and `uv sync --locked --group all --group dev`. Both locks must resolve unchanged. Do not delete locks or silently switch package managers when setup fails.
+
+`check-fe` preserves ESLint ownership and the existing Biome feature/layout scope, then checks both TypeScript projects without emitting source outputs. Node composite metadata stays in ignored `node_modules/.cache`. The node configuration uses the same ES2020 target as the app. `tsc -b --noEmit` is not used because the referenced composite node project must not disable emit under that command. The two explicit `-p` checks cover the checked-in app/node project graph, including app tests; changed filenames are never passed to the checker.
+
+`check-be` runs Ruff lint and format checks without `--fix`. `typecheck-be` uses the existing `mypy src/` import contract. These prepared-environment commands are offline and never sync dependencies. Existing `lint-be` remains an explicitly mutating developer command, not an automation gate.
+
+Static acceptance currently has preexisting ESLint, Biome, Ruff and mypy errors plus app TypeScript errors. These targets intentionally return nonzero. No rules, warnings or source coverage were reduced to make them green. A mandatory pre-push hook and Oxlint migration remain gated on a passing equivalent baseline; neither is activated here.
+
+`make test-fe-run` uses the existing `test:run` entry rather than watch mode. It is not automatically selected by static checks. Some UI tests, including the separate integration configuration, require a provisioned backend at localhost:8181. Keep full default Vitest isolation and qualify that backend separately. Never use coverage commands that swallow failures as acceptance gates. No CI workflow is introduced by this local setup change.
+
 ### Initial Setup
 
 After forking the repository, you'll need to:

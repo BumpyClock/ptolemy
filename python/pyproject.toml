@@ -7,6 +7,9 @@ requires-python = ">=3.12"
 # Base dependencies - empty since we're using dependency groups
 dependencies = []
 
+[tool.uv]
+required-version = "==0.12.0"
+
 # PyTorch CPU-only index configuration
 [[tool.uv.index]]
 name = "pytorch-cpu"

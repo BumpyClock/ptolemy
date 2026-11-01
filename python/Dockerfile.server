@@ -7,7 +7,7 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir uv
+    && pip install --no-cache-dir uv==0.12.0
 
 # Copy pyproject.toml for dependency installation
 COPY pyproject.toml .
